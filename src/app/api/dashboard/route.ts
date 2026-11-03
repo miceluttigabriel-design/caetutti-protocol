@@ -3,6 +3,8 @@ import { db } from "@/lib/db";
 import { getSession, ok, unauthorized, sucursalFilter } from "@/lib/session";
 import { recalcularInteresPorFecha } from "@/lib/interes";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   const user = await getSession();
   if (!user) return unauthorized();
@@ -11,22 +13,15 @@ export async function GET(req: NextRequest) {
   const sucursalId = searchParams.get("sucursal");
 
   // === Recálculo automático de interés y días (optimizado) ===
-  // Solo recalcula si la cuota tiene fecha de actualización vieja o si los datos están desactualizados
-  // Esto asegura que el interés se mantenga actualizado día a día
   try {
     const hoy = new Date();
     hoy.setHours(0, 0, 0, 0);
 
-    // Buscar cuotas pendientes que necesiten recálculo
-    // (cuya ultimaNotificacion o updatedAt sea de un día anterior al actual)
     const cuotasParaRecalc = await db.cuota.findMany({
       where: {
         empresaId: user.empresaId,
         estado: "pendiente",
-        OR: [
-          { updatedAt: { lt: hoy } },
-          // Si los días de atraso no coinciden con la fecha actual, también recalcular
-        ],
+        updatedAt: { lt: hoy },
       },
       select: {
         id: true,
@@ -38,35 +33,27 @@ export async function GET(req: NextRequest) {
         diasAtrasado: true,
         interesManual: true,
       },
-      take: 500, // limit para no demorar mucho
+      take: 500,
     });
 
     if (cuotasParaRecalc.length > 0) {
-      // Recalcular en paralelo (más rápido)
       await Promise.all(cuotasParaRecalc.map(async (cuota) => {
         const recalc = recalcularInteresPorFecha(
           cuota.saldoGs,
           cuota.fechaVcto,
           cuota.tasaInteresDiaria
         );
-
-        // Solo actualizar si cambió algo
         const cambioDias = (cuota.diasAtrasado || 0) !== recalc.diasAtrasado;
-
         if (cambioDias) {
-          // Si la cuota tiene interesManual=true, NO recalcular el interés (respeta el valor del usuario)
-          // Solo actualizar diasAtrasado y saldoTotalGs (saldoGs + interesGs)
           if (cuota.interesManual) {
             await db.cuota.update({
               where: { id: cuota.id },
               data: {
                 diasAtrasado: recalc.diasAtrasado,
                 saldoTotalGs: cuota.saldoGs + cuota.interesGs,
-                // NO tocar interesGs (fue editado manualmente)
               },
             });
           } else {
-            // Recalcular todo automáticamente
             await db.cuota.update({
               where: { id: cuota.id },
               data: {
@@ -80,10 +67,10 @@ export async function GET(req: NextRequest) {
       }));
     }
   } catch (e) {
-    // Si falla el recálculo, continuar con los datos existentes
     console.error("[dashboard] Error en recálculo automático:", e);
   }
 
+  // === FIX SUCURSAL: aplicar filtro a TODAS las queries ===
   const where: any = {
     empresaId: user.empresaId,
     ...sucursalFilter(user),
@@ -92,7 +79,23 @@ export async function GET(req: NextRequest) {
     where.sucursalId = sucursalId;
   }
 
-  const [cuotas, clientes, ventasMes, recordatorios, notificaciones] = await Promise.all([
+  // Where para ventasMes (mismo filtro de sucursal)
+  const whereVentas: any = { empresaId: user.empresaId };
+  if (sucursalId && sucursalId !== "__TODAS__") {
+    whereVentas.sucursalId = sucursalId;
+  } else if (user.sucursalId) {
+    // Si el usuario tiene sucursal asignada (no admin), filtrar por la suya
+    whereVentas.sucursalId = user.sucursalId;
+  }
+
+  // === Calcular período del mes actual ===
+  // Desde el día 1 del mes actual hasta el último día del mes actual
+  const hoy = new Date();
+  const inicioMes = new Date(hoy.getFullYear(), hoy.getMonth(), 1, 0, 0, 0, 0);
+  const finMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 0, 23, 59, 59, 999);
+  // finMes = último día del mes actual (usando día 0 del mes siguiente)
+
+  const [cuotas, clientes, ventasMes, recordatorios, notificaciones, cuotasDelMes] = await Promise.all([
     db.cuota.findMany({
       where: { ...where, estado: "pendiente" },
       select: {
@@ -106,7 +109,7 @@ export async function GET(req: NextRequest) {
     }),
     db.cliente.count({ where }),
     db.ventaMes.aggregate({
-      where: { empresaId: user.empresaId },
+      where: whereVentas,  // FIX: ahora filtra por sucursal
       _sum: { totalVendido: true },
     }),
     db.recordatorio.count({
@@ -114,6 +117,22 @@ export async function GET(req: NextRequest) {
     }),
     db.notificacion.count({
       where: { empresaId: user.empresaId },
+    }),
+    // === NUEVO: cuotas con fechaVcto en el mes actual (todas, cobradas y pendientes) ===
+    db.cuota.findMany({
+      where: {
+        ...where,  // respeta filtro de sucursal
+        fechaVcto: {
+          gte: inicioMes,
+          lte: finMes,
+        },
+      },
+      select: {
+        saldoGs: true,
+        saldoTotalGs: true,
+        estado: true,
+        fechaVcto: true,
+      },
     }),
   ]);
 
@@ -123,7 +142,6 @@ export async function GET(req: NextRequest) {
   const notificadas = cuotas.filter((c) => c.notificado).length;
   const sinNotificar = totalCuotas - notificadas;
 
-  const hoy = new Date();
   const vencidas = cuotas.filter((c) => c.diasAtrasado > 0);
   const porVencer = cuotas.filter((c) => c.diasAtrasado <= 0 && c.diasAtrasado >= -7);
   const criticas = cuotas.filter((c) => c.diasAtrasado > 30);
@@ -154,12 +172,40 @@ export async function GET(req: NextRequest) {
     buckets[idx].monto += (c.saldoTotalGs || c.saldoGs);
   }
 
-  // Tasa de cobranza
+  // === Tasa de cobranza general (sobre el total vendido) ===
   const totalVendido = ventasMes._sum.totalVendido || 0;
   const tasaCobranza =
     totalVendido > 0
       ? ((totalVendido - totalPendiente) / totalVendido) * 100
       : 0;
+
+  // === NUEVO: % Recuperado del Mes ===
+  // Cuotas con fechaVcto en el mes actual, separadas por estado
+  const cuotasMesCobradas = cuotasDelMes.filter((c) => c.estado === "cobrada");
+  const cuotasMesPendientes = cuotasDelMes.filter((c) => c.estado === "pendiente");
+
+  const totalCuotasMes = cuotasDelMes.length;
+  const totalCobradasMes = cuotasMesCobradas.length;
+  const totalPendientesMes = cuotasMesPendientes.length;
+
+  // Montos: para las cobradas usamos saldoGs (lo que se cobró); para pendientes usamos saldoTotalGs (lo que falta)
+  const montoCobradoMes = cuotasMesCobradas.reduce((s, c) => s + (c.saldoGs || 0), 0);
+  const montoPendienteMes = cuotasMesPendientes.reduce((s, c) => s + (c.saldoTotalGs || c.saldoGs || 0), 0);
+  const montoTotalMes = montoCobradoMes + montoPendienteMes;
+
+  // % recuperado = cobrado / total * 100
+  const pctRecuperadoMes = montoTotalMes > 0
+    ? (montoCobradoMes / montoTotalMes) * 100
+    : 0;
+
+  // Período para mostrar en la UI
+  const periodoMes = {
+    inicio: inicioMes.toISOString(),
+    fin: finMes.toISOString(),
+    inicioStr: inicioMes.toLocaleDateString("es-PY"),
+    finStr: finMes.toLocaleDateString("es-PY"),
+    mesNombre: inicioMes.toLocaleDateString("es-PY", { month: "long", year: "numeric" }),
+  };
 
   return ok({
     kpis: {
@@ -177,12 +223,18 @@ export async function GET(req: NextRequest) {
       recordatoriosPendientes: recordatorios,
       notificacionesEnviadas: notificaciones,
     },
+    // === NUEVOS KPIs del mes ===
+    mes: {
+      pctRecuperado: pctRecuperadoMes,
+      montoCobrado: montoCobradoMes,
+      montoPendiente: montoPendienteMes,
+      montoTotal: montoTotalMes,
+      cuotasCobradas: totalCobradasMes,
+      cuotasPendientes: totalPendientesMes,
+      cuotasTotal: totalCuotasMes,
+      periodo: periodoMes,
+    },
     buckets,
-    tendencia: [], // se llenará abajo
+    tendencia: [],
   });
-}
-
-// Helper export
-function startOfMonth(d: Date) {
-  return new Date(d.getFullYear(), d.getMonth(), 1);
 }

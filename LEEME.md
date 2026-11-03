@@ -1,54 +1,54 @@
-# FIX PIE BUG — Caetutti Protocol
+# FIX DASHBOARD — Caetutti Protocol
 
-## 🎯 El problema (CAUSA RAÍZ detectada en el repositorio)
+## 2 problemas resueltos
 
-Las reglas PIE no se aplicaban a los mensajes porque había **2 bugs**:
+### 1️⃣ Dashboard no funcionaba por sucursal
+**Antes:** La query de `ventasMes` NO respetaba el filtro de sucursal — siempre traía todas las ventas de la empresa, sin importar qué sucursal estuvieras mirando.
 
-### Bug #1: Mismatch en el nombre del campo `diasAtrasado`
+**Ahora:** Todas las queries (cuotas, clientes, ventasMes, cuotas del mes) respetan el filtro de sucursal seleccionado en el dropdown. Si elegís "NUEVA ESPERANZA", solo cuenta los datos de esa sucursal.
 
-- El endpoint `/api/notificaciones` (parche v3) manda las cuotas con el campo **`diasAtraso`** (sin "d")
-- Pero `generarMensajeAgrupado` en `mensajes.ts` busca **`q.diasAtrasado`** (con "d")
-- Resultado: `q.diasAtrasado` da `undefined` → se usa `0` → siempre selecciona la regla "0-7 días"
+### 2️⃣ "Salud de Cobranza" → "Total % Recuperado del Mes"
+**Antes:** "Salud de Cobranza" calculaba `(totalVendido - totalPendiente) / totalVendido * 100` sobre el total histórico acumulado.
 
-### Bug #2: El endpoint `generar-mensaje` NO recalcula días al vuelo
+**Ahora:** Calcula el **% recuperado dentro del mes actual** (del 01 al último día del mes):
 
-- Cuando hacés clic en "Ver" para previsualizar, el endpoint carga las cuotas de la DB
-- La DB tiene `diasAtrasado` desactualizado (el valor guardado al importar, que no se recalcula)
-- Por eso siempre da 0 días y elige la regla amable "0-7 días"
+```
+% Recuperado = (monto cobrado del mes / monto total del mes) * 100
+```
 
-## ✅ La solución
+Donde:
+- **monto cobrado del mes** = suma de `saldoGs` de cuotas con `fechaVcto` en el mes actual y `estado = "cobrada"`
+- **monto total del mes** = suma de todas las cuotas (cobradas + pendientes) con `fechaVcto` en el mes actual
+- **período** = desde el día 1 del mes actual hasta el último día del mes actual
 
-### Archivo 1: `src/app/api/notificaciones/generar-mensaje/route.ts` (REEMPLAZAR)
-
-Fix del endpoint que genera el mensaje de preview:
-
-1. **Recalcula `diasAtrasado` al vuelo** basado en `fechaVcto` vs hoy
-2. **Asegura que cada cuota tenga el campo `diasAtrasado`** (con "d") — que es el que usa `generarMensajeAgrupado`
-3. Retorna un campo `_diagnostico` con el `maxDiasAtraso` calculado, para que puedas verificar en la consola del navegador
-
-### Archivo 2: `src/app/api/admin/diagnosticar-pie/route.ts` (NUEVO)
-
-Endpoint de diagnóstico y reparación:
-
-**GET /api/admin/diagnosticar-pie** — diagnostica TODO:
-- Conteo de reglas por tipo (individual, pie_cliente, pie_codeudor)
-- Estado de `usarReglasDinamicas` en TemplateAgrupada y TemplateCodeudor
-- Lista de reglas pie_cliente y pie_codeudor con sus rangos
-- Muestra de 5 clientes con:
-  - `diasEnDB` (lo que está guardado)
-  - `diasReales` (lo que debería ser)
-  - `discrepancia` (❌ DIFERENTE o ✓ OK)
-  - `reglaPieQueDeberiaSeleccionarse` (nombre de la regla)
-- Lista de `problemas` detectados
-
-**POST /api/admin/diagnosticar-pie** con `{ arreglar: true }` — repara:
-- Pone `usarReglasDinamicas=true` en TemplateAgrupada y TemplateCodeudor
-- Activa todas las reglas pie que estén inactivas
-- No borra ni modifica mensajes ni rangos
+Ejemplo: hoy es 03/11/2026 → el cálculo considera todas las cuotas con `fechaVcto` entre **01/11/2026** y **30/11/2026**.
 
 ---
 
-## 🚀 Pasos para aplicar
+## Archivos a reemplazar
+
+### 1. `src/app/api/dashboard/route.ts` (REEMPLAZAR)
+
+Cambios:
+- ✅ Aplica filtro de sucursal a TODAS las queries (incluyendo `ventasMes`)
+- ✅ Agrega query de `cuotasDelMes` — busca cuotas con `fechaVcto` entre el 01 y el último día del mes actual
+- ✅ Calcula `pctRecuperado`, `montoCobrado`, `montoPendiente`, `montoTotal` para el mes
+- ✅ Retorna objeto `mes` con el período (fechas de inicio/fin) para mostrar en la UI
+- ✅ Respeta filtro de sucursal cuando se selecciona una específica
+
+### 2. `src/components/modules/dashboard.tsx` (REEMPLAZAR)
+
+Cambios:
+- ✅ Reemplaza "Salud de Cobranza" por **"Total % Recuperado del Mes"** con ícono de calendario
+- ✅ Muestra el período activo: `Noviembre 2026 · 01/11/2026 → 30/11/2026`
+- ✅ Muestra monto cobrado, monto pendiente y totales del mes
+- ✅ Muestra conteo de cuotas: `X cobradas · Y pendientes · Z total`
+- ✅ Mensaje de estado: Excelente / Aceptable / Requiere atención / Crítico
+- ✅ Mantiene TODOS los demás elementos: KPIs principales, charts, resumen operativo
+
+---
+
+## Pasos para aplicar
 
 ### 1️⃣ Descargá y descomprimí este ZIP
 
@@ -56,139 +56,89 @@ Endpoint de diagnóstico y reparación:
 
 **Archivo 1 (reemplazar existente):**
 ```
-src/app/api/notificaciones/generar-mensaje/route.ts
-→ ...caetutti-protocol\src\app\api\notificaciones\generar-mensaje\route.ts
+src/app/api/dashboard/route.ts
+→ ...caetutti-protocol\src\app\api\dashboard\route.ts
 ```
 
-**Archivo 2 (crear carpeta nueva + archivo):**
+**Archivo 2 (reemplazar existente):**
 ```
-src/app/api/admin/diagnosticar-pie/route.ts
-→ ...caetutti-protocol\src\app\api\admin\diagnosticar-pie\route.ts
+src/components/modules/dashboard.tsx
+→ ...caetutti-protocol\src\components\modules\dashboard.tsx
 ```
 
 ### 3️⃣ GitHub Desktop — verás 2 archivos:
-- `src/app/api/notificaciones/generar-mensaje/route.ts` (modificado)
-- `src/app/api/admin/diagnosticar-pie/route.ts` (nuevo)
+- `src/app/api/dashboard/route.ts` (modificado)
+- `src/components/modules/dashboard.tsx` (modificado)
 
 ### 4️⃣ Commit + Push:
-- Mensaje: `fix: reglas PIE no se aplicaban — recalcular diasAtrasado al generar mensaje`
+- Mensaje: `feat: dashboard por sucursal + % recuperado del mes actual`
 - **Commit to main** → **Push origin**
 
 ### 5️⃣ Esperá 2-3 min a que Vercel redeploye
 
 ---
 
-## 🔍 Cómo diagnosticar (después del deploy)
+## ✅ Cómo verificar que funciona
 
-### Paso 1: Ver el diagnóstico completo
+### Dashboard por sucursal
 
-1. Entrá a https://caetutti-protocol.vercel.app (logueate como admin/admin123)
-2. Abrí la consola del navegador (**F12** → pestaña **Console**)
-3. Pegá este código y dale **Enter**:
+1. Andá al dashboard principal
+2. En el dropdown de sucursales (arriba a la derecha), elegí una sucursal específica (ej: NUEVA ESPERANZA)
+3. Los KPIs deben reflejar SOLO los datos de esa sucursal:
+   - Total Pendiente
+   - Tasa de Cobranza (sobre el vendido de ESA sucursal)
+   - Crítico (+30 días)
+   - Clientes Activos
+4. Cambiá a otra sucursal → los números deben cambiar
+5. Cambiá a "Todas las sucursales" → muestra el total agregado
 
-```javascript
-fetch('/api/admin/diagnosticar-pie')
-.then(r => r.json())
-.then(data => console.log('🔍 DIAGNÓSTICO:', data))
-.catch(e => console.error('❌ Error:', e));
-```
+### % Recuperado del Mes
 
-4. Vas a ver:
-   - Cuántas reglas hay de cada tipo
-   - Si `usarReglasDinamicas` está activo
-   - Lista de reglas pie con sus rangos
-   - 5 clientes de muestra con sus días reales vs los de la DB
-   - Lista de problemas detectados
+1. En el dashboard vas a ver la nueva barra: **"Total % Recuperado del Mes"**
+2. Debajo del porcentaje, vas a ver el período activo:
+   ```
+   noviembre 2026 · 01/11/2026 → 30/11/2026
+   ```
+3. A la derecha vas a ver:
+   ```
+   Cobrado del mes: ₲ X
+   Pendiente del mes: ₲ Y
+   A cobradas · B pendientes · C total
+   ```
+4. El porcentaje se calcula: `cobrado / (cobrado + pendiente) * 100`
 
-### Paso 2: Arreglar automáticamente
+### Lógica del cálculo
 
-Si el diagnóstico muestra algún ❌, ejecutá:
+- **Cuota "cobrada" del mes**: tiene `fechaVcto` en el mes actual y `estado = "cobrada"`
+- **Cuota "pendiente" del mes**: tiene `fechaVcto` en el mes actual y `estado = "pendiente"`
+- **% recuperado** = monto cobrado / monto total * 100
 
-```javascript
-fetch('/api/admin/diagnosticar-pie', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ arreglar: true })
-})
-.then(r => r.json())
-.then(data => console.log('🔧 REPARACIÓN:', data))
-.catch(e => console.error('❌ Error:', e));
-```
-
-Esto:
-- Activa `usarReglasDinamicas=true` en los templates
-- Activa todas las reglas pie inactivas
-
-### Paso 3: Recalcular días de la DB (si el diagnóstico muestra discrepancia)
-
-Si el diagnóstico muestra `❌ X de 5 clientes tienen diasAtrasado desactualizado`, ejecutá:
-
-```javascript
-fetch('/api/admin/recalcular-dias', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({})
-})
-.then(r => r.json())
-.then(data => console.log('📊 RECALCULAR:', data))
-.catch(e => console.error('❌ Error:', e));
-```
-
-### Paso 4: Verificar que las reglas funcionan
-
-1. Andá a **Notificaciones** → botón **Ver** de un cliente
-2. En la consola del navegador vas a ver el `_diagnostico` con el `maxDiasAtraso` calculado
-3. El mensaje que se muestra debe tener el pie correcto según los días reales
+> Importante: las cuotas se marcan como "cobradas" cuando no vienen en una nueva importación del Excel (el cliente ya pagó) o cuando el saldo es 0. Por eso, mientras más importes el Excel actualizado, más preciso va a ser el % recuperado.
 
 ---
 
-## 📋 Ejemplo del diagnóstico
+## 📋 Ejemplo visual
 
-Cuando ejecutás `GET /api/admin/diagnosticar-pie`, vas a ver algo así:
-
-```javascript
-{
-  resumen: {
-    totalReglas: 12,
-    conteoPorTipo: {
-      individual: 0,
-      pie_cliente: 6,
-      pie_codeudor: 6,
-      otras: 0
-    },
-    templateAgrupada: { usarReglasDinamicas: true, tienePieEstatico: true },
-    templateCodeudor: { usarReglasDinamicas: true, tienePieEstatico: true }
-  },
-  reglasPieCliente: [
-    { nombre: "PIE CLIENTE — Por vencer (0-7 días)", diasMinPie: 0, diasMaxPie: 7, ordenPie: 1, activa: true },
-    { nombre: "PIE CLIENTE — Vencido leve (8-30 días)", diasMinPie: 8, diasMaxPie: 30, ordenPie: 2, activa: true },
-    ...
-  ],
-  muestraClientes: [
-    {
-      entidad: "ABADIE SEGOVIA MARCIAL",
-      maxDiasReales: 45,
-      maxDiasDB: 0,  // ← esto es el problema si difiere
-      reglaPieQueDeberiaSeleccionarse: "PIE CLIENTE — Vencido moderado (31-60 días)",
-      cuotas: [
-        { diasEnDB: 0, diasReales: 45, discrepancia: "❌ DIFERENTE" }
-      ]
-    }
-  ],
-  problemas: [
-    "❌ 5 de 5 clientes tienen diasAtrasado desactualizado en la DB"
-  ]
-}
 ```
-
-Si ves el problema de días desactualizados, ejecutá el `POST /api/admin/recalcular-dias` y listo.
+┌─────────────────────────────────────────────────────────┐
+│ 📅 TOTAL % RECUPERADO DEL MES                  72.5%    │
+│ noviembre 2026 · 01/11/2026 → 30/11/2026                │
+│                                          Cobrado del mes│
+│ ████████████████░░░░░░░░░░░░░░░░         ₲ 1.2B         │
+│                                          Pendiente del mes│
+│ ⚠ Recuperación aceptable · sobre ₲ 1.7B   ₲ 500M       │
+│ totales del mes                           234 cobradas  │
+│                                           · 89 pendientes│
+│                                           · 323 total   │
+└─────────────────────────────────────────────────────────┘
+```
 
 ---
 
 ## Lo que NO se tocó
 
-- ✅ `src/lib/mensajes.ts` — sin cambios (ya tenía el fix de sustituir variables en el pie)
-- ✅ `src/components/modules/reglas.tsx` — sin cambios (la UI funciona bien)
-- ✅ `src/app/api/reglas/route.ts` — sin cambios (el endpoint guarda bien el campo `tipo`)
-- ✅ Reglas existentes — no se borran ni modifican
-- ✅ Templates — no se modifican (solo se activa `usarReglasDinamicas` si estaba apagado)
+- ✅ KPIs principales (Total Pendiente, Tasa de Cobranza, Crítico, Clientes Activos) — sin cambios
+- ✅ Charts (Distribución por Antigüedad, Cuotas por Tramo) — sin cambios
+- ✅ Resumen operativo (Notificadas, Sin Notificar, Recordatorios, Notifs. Enviadas) — sin cambios
+- ✅ Recálculo automático de interés y días — sin cambios
+- ✅ Filtro de sucursal del usuario (no admin) — sin cambios (sigue limitado a su sucursal)

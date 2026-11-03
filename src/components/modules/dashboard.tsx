@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
-import { TrendingUp, TrendingDown, Wallet, Users, Bell, Clock, AlertTriangle, Target, CheckCircle2 } from "lucide-react";
+import { TrendingUp, TrendingDown, Wallet, Users, Bell, Clock, AlertTriangle, Target, CheckCircle2, Calendar } from "lucide-react";
 import { fmtGs, fmtGsShort, fmtNumber, fmtPct } from "@/lib/format";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, PieChart, Pie, Cell, Legend } from "recharts";
 
@@ -38,7 +38,7 @@ export function DashboardPage({ sucursal }: { sucursal: string }) {
     );
   }
 
-  const { kpis, buckets } = data;
+  const { kpis, buckets, mes } = data;
 
   const bucketData = buckets.map((b: any) => ({
     name: b.label,
@@ -51,9 +51,12 @@ export function DashboardPage({ sucursal }: { sucursal: string }) {
     .map((b: any) => ({ name: b.label, value: b.count, monto: b.monto }));
 
   const tasaCobranzaPct = Math.max(0, Math.min(100, kpis.tasaCobranza));
-  const saludColor =
-    tasaCobranzaPct >= 85 ? "text-emerald-400" :
-    tasaCobranzaPct >= 70 ? "text-amber-400" : "text-red-400";
+
+  // === % Recuperado del Mes ===
+  const pctRecuperadoMes = Math.max(0, Math.min(100, mes.pctRecuperado));
+  const recuperadoColor =
+    pctRecuperadoMes >= 85 ? "text-emerald-400" :
+    pctRecuperadoMes >= 70 ? "text-amber-400" : "text-red-400";
 
   return (
     <div className="space-y-4">
@@ -89,26 +92,38 @@ export function DashboardPage({ sucursal }: { sucursal: string }) {
         />
       </div>
 
-      {/* Health bar */}
+      {/* === BARRA DE % RECUPERADO DEL MES === */}
       <Card className="glass-card">
         <CardContent className="p-4">
-          <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider">Salud de Cobranza</p>
-              <p className={`text-2xl font-bold ${saludColor}`}>{fmtPct(tasaCobranzaPct)}</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1">
+                <Calendar className="w-3 h-3" />
+                Total % Recuperado del Mes
+              </p>
+              <p className={`text-2xl font-bold ${recuperadoColor}`}>{fmtPct(pctRecuperadoMes)}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5 capitalize">
+                {mes.periodo.mesNombre} · {mes.periodo.inicioStr} → {mes.periodo.finStr}
+              </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted-foreground">Cobrado</p>
+              <p className="text-xs text-muted-foreground">Cobrado del mes</p>
               <p className="text-sm font-semibold text-emerald-400">
-                {fmtGsShort(kpis.totalVendido - kpis.totalPendiente)}
+                {fmtGsShort(mes.montoCobrado)}
               </p>
-              <p className="text-xs text-muted-foreground mt-1">Pendiente</p>
-              <p className="text-sm font-semibold text-amber-400">{fmtGsShort(kpis.totalPendiente)}</p>
+              <p className="text-xs text-muted-foreground mt-1">Pendiente del mes</p>
+              <p className="text-sm font-semibold text-amber-400">{fmtGsShort(mes.montoPendiente)}</p>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {mes.cuotasCobradas} cobradas · {mes.cuotasPendientes} pendientes · {mes.cuotasTotal} total
+              </p>
             </div>
           </div>
-          <Progress value={tasaCobranzaPct} className="h-2" />
+          <Progress value={pctRecuperadoMes} className="h-2" />
           <p className="text-[10px] text-muted-foreground mt-1.5">
-            {tasaCobranzaPct >= 85 ? "✓ Saludable" : tasaCobranzaPct >= 70 ? "⚠ Atenção requerida" : "⚠ Crítico"}
+            {pctRecuperadoMes >= 85 ? "✓ Excelente recuperación" :
+             pctRecuperadoMes >= 70 ? "⚠ Recuperación aceptable" :
+             pctRecuperadoMes >= 50 ? "⚠ Requiere atención" : "⚠ Crítico — gestionar urgente"}
+            {" · "}sobre {fmtGsShort(mes.montoTotal)} totales del mes
           </p>
         </CardContent>
       </Card>
