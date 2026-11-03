@@ -1,40 +1,149 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
+import * as XLSX from "xlsx";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Upload, FileSpreadsheet, Download, AlertCircle, CheckCircle2, Loader2, FileJson } from "lucide-react";
 import { toast } from "sonner";
 
+const CHUNK_SIZE = 200; // filas por lote — evita timeout de Vercel
+
 export function ImportarModule() {
   const qc = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const [resultado, setResultado] = useState<any | null>(null);
+  const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
+  const [importando, setImportando] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const importar = useMutation({
-    mutationFn: async () => {
-      if (!file) throw new Error("Selecciona un archivo");
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await fetch("/api/import", { method: "POST", body: fd });
-      const data = await r.json();
-      if (!r.ok) throw new Error(data.error || "Error al importar");
-      return data;
-    },
-    onSuccess: (data) => {
-      setResultado(data.result);
-      toast.success(`Importación completada: ${data.result.cuotasProcesadas} cuotas`);
+  // === IMPORTACIÓN POR LOTES (chunks) ===
+  // Divide el archivo en lotes de 200 filas y los envía uno por uno.
+  // Esto evita el timeout de Vercel con archivos grandes (1000+ filas).
+  const importarArchivo = async () => {
+    if (!file) {
+      toast.error("Selecciona un archivo");
+      return;
+    }
+
+    setImportando(true);
+    setProgress(null);
+    setResultado(null);
+
+    try {
+      // === 1. Leer el archivo y convertir a filas ===
+      let allRows: any[] = [];
+
+      if (file.name.toLowerCase().endsWith(".json")) {
+        // JSON
+        const text = await file.text();
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          allRows = parsed;
+        } else if (parsed.clientes && Array.isArray(parsed.clientes)) {
+          allRows = parsed.clientes;
+        } else {
+          throw new Error("JSON inválido. Debe ser array o { clientes: [...] }");
+        }
+      } else {
+        // Excel
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        allRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+      }
+
+      if (allRows.length === 0) {
+        throw new Error("El archivo está vacío");
+      }
+
+      console.log(`[import] Total filas leídas: ${allRows.length}`);
+
+      // === 2. Dividir en lotes ===
+      const lotes: any[][] = [];
+      for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
+        lotes.push(allRows.slice(i, i + CHUNK_SIZE));
+      }
+
+      console.log(`[import] Total lotes: ${lotes.length} (${CHUNK_SIZE} filas por lote)`);
+      setProgress({ current: 0, total: lotes.length });
+
+      // === 3. Enviar cada lote ===
+      const resultadoTotal = {
+        clientesNuevos: 0,
+        clientesActualizados: 0,
+        cuotasProcesadas: 0,
+        marcadasCobradas: 0,
+        cuotasMarcadasCobradas: 0,
+        codeudoresNuevos: 0,
+        sucursalesCreadas: 0,
+        errores: [] as string[],
+        advertencias: [] as string[],
+      };
+
+      for (let i = 0; i < lotes.length; i++) {
+        setProgress({ current: i + 1, total: lotes.length });
+
+        const fd = new FormData();
+        fd.append(
+          "file",
+          new File(
+            [JSON.stringify({ clientes: lotes[i] })],
+            `lote-${i + 1}.json`,
+            { type: "application/json" }
+          )
+        );
+
+        const r = await fetch("/api/import", { method: "POST", body: fd });
+
+        if (!r.ok) {
+          let errMsg = `Error HTTP ${r.status}`;
+          try {
+            const errData = await r.json();
+            errMsg = errData.error || errMsg;
+          } catch {}
+          throw new Error(`Lote ${i + 1}/${lotes.length}: ${errMsg}`);
+        }
+
+        const data = await r.json();
+        const res = data.result;
+
+        // Acumular resultados
+        if (res) {
+          resultadoTotal.clientesNuevos += res.clientesNuevos || 0;
+          resultadoTotal.clientesActualizados += res.clientesActualizados || 0;
+          resultadoTotal.cuotasProcesadas += res.cuotasProcesadas || 0;
+          resultadoTotal.marcadasCobradas += res.marcadasCobradas || 0;
+          resultadoTotal.cuotasMarcadasCobradas += res.cuotasMarcadasCobradas || 0;
+          resultadoTotal.codeudoresNuevos += res.codeudoresNuevos || 0;
+          resultadoTotal.sucursalesCreadas += res.sucursalesCreadas || 0;
+          if (res.errores?.length) resultadoTotal.errores.push(...res.errores);
+          if (res.advertencias?.length) resultadoTotal.advertencias.push(...res.advertencias);
+        }
+      }
+
+      // === 4. Mostrar resultado final ===
+      setResultado(resultadoTotal);
+      toast.success(
+        `Importación completada: ${resultadoTotal.cuotasProcesadas} cuotas en ${lotes.length} lote(s)`
+      );
       qc.invalidateQueries({ queryKey: ["clientes"] });
       qc.invalidateQueries({ queryKey: ["cuotas"] });
       qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["notifs"] });
       setFile(null);
-    },
-    onError: (e: any) => toast.error(e.message),
-  });
+      if (inputRef.current) inputRef.current.value = "";
+    } catch (e: any) {
+      console.error("[import] Error:", e);
+      toast.error(e.message || "Error al importar");
+    } finally {
+      setImportando(false);
+      setProgress(null);
+    }
+  };
 
   const descargarPlantilla = () => {
     window.location.href = "/api/import/template";
@@ -96,14 +205,34 @@ export function ImportarModule() {
               )}
             </div>
 
+            {/* Barra de progreso para importación por lotes */}
+            {progress && (
+              <div className="p-3 rounded-lg bg-primary/5 border border-primary/20 space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-primary">
+                    Importando lote {progress.current} de {progress.total}...
+                  </span>
+                  <span className="text-muted-foreground">
+                    {Math.round((progress.current / progress.total) * 100)}%
+                  </span>
+                </div>
+                <div className="h-2 bg-secondary rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-primary transition-all duration-300"
+                    style={{ width: `${Math.round((progress.current / progress.total) * 100)}%` }}
+                  />
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-2">
               <Button
-                onClick={() => importar.mutate()}
-                disabled={!file || importar.isPending}
+                onClick={importarArchivo}
+                disabled={!file || importando}
                 className="flex-1 glow-primary"
               >
-                {importar.isPending ? (
-                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Importando…</>
+                {importando ? (
+                  <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Importando por lotes…</>
                 ) : (
                   <><Upload className="w-4 h-4 mr-2" /> Importar Archivo</>
                 )}
