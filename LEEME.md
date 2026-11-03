@@ -1,69 +1,72 @@
-# FIX IMPORT EXCEL — Caetutti Protocol
+# FIX CODEUDORES APARTE — Caetutti Protocol
 
-## Problema
-La importación del Excel falla con 2801 errores:
-```
-Cliente sin codigoEntidad o entidad
-```
+## Qué se pidió
+> "en la parte de notificaciones quiero que ponga una opcion ahi de coodeudor para cobrar apenas el coodeudor amigo asi gestionamos los coodeudores aparte amigo de los titulares entonces no vá hacer falta mas agregar el coodeudor abajo del cliente en notificaciones"
 
-## Causa raíz
-El front-end `src/components/modules/importar.tsx` lee el Excel con `XLSX.utils.sheet_to_json()`
-y envía las filas al backend envueltas como `{ clientes: [...filas...] }`.
+## Cambios realizados (con mucho cuidado, solo lo que se pidió)
 
-Pero las filas del Excel tienen **keys con espacios** ("Codigo Entidad", "Entidad", "Fecha Vcto"),
-mientras que el backend `/api/import` en modo JSON estructurado espera **keys camelCase**
-(`codigoEntidad`, `entidad`, `cuotas: [...]`).
+### 1. Agregué pestañas en el toolbar de Notificaciones
+Dos botones arriba a la izquierda:
+- **Titulares** (verde/primary) — lista de clientes como siempre, SIN la fila de codeudor debajo
+- **Codeudores** (violeta) — nueva pestaña que lista solo codeudores para gestionarlos aparte
 
-Resultado: TODAS las filas fallan porque `c.codigoEntidad` es `undefined` para el backend.
+### 2. Eliminé la fila "Codeudor debajo del titular" en NotifCard
+En la pestaña **Titulares** ya NO aparece:
+- ❌ La fila violeta con el codeudor debajo del titular
+- ❌ El botón "Registrar Codeudor" cuando no tenía codeudor
+- ❌ La función `abrirWhatsappCodeudor` dentro de NotifCard (ya sin uso)
 
-## Solución
-Se agregó una función `filasExcelAClientes(rows)` en el front-end que:
+La tarjeta del titular ahora termina con:
+- Datos del cliente + botones Ver / Editar / Cliente
+- Modal editar montos (sin cambios)
+- **GarantesSection** (múltiples garantes — SIN cambios, sigue funcionando igual)
 
-1. Lee cada fila del Excel con sus keys originales ("Codigo Entidad", "Entidad", etc.)
-2. Agrupa las filas por `Codigo Entidad` en un Map
-3. Para cada cliente crea un objeto:
-   ```js
-   {
-     codigoEntidad: "52813",
-     entidad: "AGUILERA PEREIRA, ROLAN MOISES",
-     telefono: "0986101358",
-     // ...otros campos
-     cuotas: [{ fechaVcto, saldoGs, ... }, ...]
-   }
-   ```
-4. Cada fila del Excel se convierte en una cuota del cliente correspondiente
-5. Las filas vacías o de "TOTAL" se ignoran silenciosamente
+### 3. Nuevo componente `CodeudorCard` para la pestaña "Codeudores"
+Cada tarjeta muestra:
+- 👤 Avatar violeta + nombre del codeudor
+- 📞 Teléfono (o "Sin teléfono")
+- 🔗 Titular asociado: `#codigoEntidad + nombre`
+- 💰 Total a cobrar (heredado del titular, con interés si aplica)
+- Botones:
+  - **Ver** — abre el detalle con preview del mensaje
+  - **Notificar** — abre WhatsApp con mensaje pre-cargado para el codeudor
+    - Usa `esCodeudorGarante: true` para NO marcar las cuotas del titular como notificadas
+  - **Editar** — abre el `CodeudorDialog` existente (sin cambios)
 
-Esta estructura `{ clientes: [...] }` es exactamente lo que el backend espera en
-su camino `importStructured()` (línea 226-393 de src/app/api/import/route.ts),
-que tiene toda la lógica de:
-- Re-importación sin pisar montos editados
-- Marcar como cobradas las cuotas que no vinieron en el Excel nuevo
-- Recalcular interés e días automáticamente
-- Preservar `notificado`, `ultimaNotificacion`, `montoEditado`, `interesManual`
-
-## Beneficios adicionales
-- **Agrupa cuotas por cliente** → menos queries a la DB (1 findUnique + N inserts vs N×3 queries)
-- **Respeta la lógica de "no vino → cobrada"** que espera la estructura anidada
-- **Mantiene el chunking** (100 clientes por lote) para evitar timeout de Vercel
-- **Maneja JSON en ambos formatos**: estructura anidada o array plano de filas Excel
+### Lo que NO se tocó (para no romper nada)
+- ✅ GarantesSection (múltiples garantes) — funciona igual
+- ✅ GaranteEditInline — funciona igual
+- ✅ CodeudorDialog (registrar/editar/eliminar codeudor) — funciona igual
+- ✅ NotifDetalle (ver detalle con preview) — funciona igual
+- ✅ EditMontoDialog (editar saldos e intereses) — funciona igual
+- ✅ Stats (Total, Sin teléfono, Con codeudor, Total a cobrar) — sin cambios
+- ✅ Buscador — sigue buscando por cliente, teléfono o codeudor
+- ✅ Switch "Ocultar notificados" — sin cambios
 
 ## Archivo a reemplazar
 ```
-src/components/modules/importar.tsx
+src/components/modules/notificaciones.tsx
 ```
 (Un solo archivo — copiar sobre el existente en el repo local)
 
 ## Pasos
 1. Descargar y descomprimir este ZIP
-2. Copiar `src/components/modules/importar.tsx` sobre el del repo local:
+2. Copiar `src/components/modules/notificaciones.tsx` sobre el del repo local:
    ```
-   C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol\src\components\modules\importar.tsx
+   C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol\src\components\modules\notificaciones.tsx
    ```
 3. GitHub Desktop → verás 1 archivo modificado
-4. Commit message: `fix: import Excel agrupa filas en estructura clientes/cuotas`
+4. Commit message: `feat: pestaña Codeudores aparte en Notificaciones`
 5. **Commit to main** → **Push origin**
 6. Esperar 2-3 min a que Vercel redeploye
-7. Probar importar el Excel de 1556 filas en https://caetutti-protocol.vercel.app
-8. El resultado debería mostrar ~700-800 clientes nuevos y ~1500 cuotas procesadas
-   (dependiendo de cuántas cuotas tenga cada cliente en tu Excel)
+7. Probar en https://caetutti-protocol.vercel.app → módulo Notificaciones
+
+## Cómo usar la nueva UI
+1. Abrir **Notificaciones**
+2. Verás dos pestañas arriba a la izquierda: `Titulares` y `Codeudores`
+3. **Titulares**: lista limpia de clientes, sin codeudor debajo (solo garantes siguen abajo)
+4. **Codeudores**: lista de todos los codeudores registrados, cada uno con:
+   - Su teléfono y datos
+   - El titular al que está asociado
+   - Botones para Ver / Notificar / Editar
+5. Para agregar o editar un codeudor, vas a la pestaña "Codeudores" → botón "Editar" de cualquier codeudor existente → abre el dialog donde podés agregar/editar/eliminar

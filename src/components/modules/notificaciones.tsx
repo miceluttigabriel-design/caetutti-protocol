@@ -21,6 +21,8 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
   const [viewing, setViewing] = useState<any | null>(null);
   const [viewingModo, setViewingModo] = useState<"cliente" | "codeudor">("cliente");
   const [editingCodeudor, setEditingCodeudor] = useState<any | null>(null);
+  // Pestaña activa: "titulares" (clientes) o "codeudores" (gestión aparte)
+  const [tab, setTab] = useState<"titulares" | "codeudores">("titulares");
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["notifs", sucursal, ocultarNotificados],
@@ -47,6 +49,32 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
     <div className="space-y-4">
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2 items-center">
+        {/* Pestañas: Titulares / Codeudores */}
+        <div className="flex gap-1 p-1 rounded-lg bg-secondary/40 border border-border/40">
+          <button
+            onClick={() => setTab("titulares")}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+              tab === "titulares"
+                ? "bg-primary text-primary-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <User className="w-3 h-3 inline mr-1" />
+            Titulares
+          </button>
+          <button
+            onClick={() => setTab("codeudores")}
+            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
+              tab === "codeudores"
+                ? "bg-violet-500 text-white"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <UserPlus className="w-3 h-3 inline mr-1" />
+            Codeudores
+          </button>
+        </div>
+
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} /> Actualizar
         </Button>
@@ -90,14 +118,27 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
         {isLoading && Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
         {!isLoading && filtered.length === 0 && (
           <Card className="glass-card p-8 text-center">
-            <p className="text-muted-foreground text-sm">No hay clientes con cuotas pendientes para los filtros seleccionados.</p>
+            <p className="text-muted-foreground text-sm">
+              {tab === "codeudores"
+                ? "No hay codeudores registrados para los filtros seleccionados."
+                : "No hay clientes con cuotas pendientes para los filtros seleccionados."}
+            </p>
           </Card>
         )}
-        {!isLoading && filtered.slice(0, 100).map((c) => (
+        {/* === PESTAÑA TITULARES: lista de clientes (sin la fila de codeudor debajo) === */}
+        {!isLoading && tab === "titulares" && filtered.slice(0, 100).map((c) => (
           <NotifCard
             key={c.id}
             cliente={c}
             onView={() => { setViewingModo("cliente"); setViewing(c); }}
+          />
+        ))}
+        {/* === PESTAÑA CODEUDORES: lista de codeudores (gestión aparte) === */}
+        {!isLoading && tab === "codeudores" && filtered.filter((c) => c.codeudor).slice(0, 100).map((c) => (
+          <CodeudorCard
+            key={`cod-${c.id}`}
+            cliente={c}
+            onView={() => { setViewingModo("codeudor"); setViewing(c); }}
             onEditCodeudor={() => setEditingCodeudor(c)}
           />
         ))}
@@ -127,13 +168,13 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
 }
 
 // ============================================================
-// TARJETA DE CLIENTE + CODEUDOR DEBAJO
+// TARJETA DE CLIENTE (TITULAR) — sin codeudor debajo
+// (los codeudores se gestionan aparte en la pestaña "Codeudores")
 // ============================================================
 
-function NotifCard({ cliente, onView, onEditCodeudor }: {
+function NotifCard({ cliente, onView }: {
   cliente: any;
   onView: () => void;
-  onEditCodeudor: () => void;
 }) {
   const qc = useQueryClient();
   const [showEditMonto, setShowEditMonto] = useState(false);
@@ -170,42 +211,6 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
       const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
       window.open(url, "_blank");
       toast.success(`Abriendo WhatsApp para ${cliente.entidad}`);
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-    } catch (e: any) {
-      toast.error(e.message || "Error");
-    }
-  };
-
-  const abrirWhatsappCodeudor = async () => {
-    try {
-      if (!cliente.codeudor?.telefono) {
-        toast.error("El codeudor no tiene teléfono");
-        return;
-      }
-      const genRes = await fetch("/api/notificaciones/generar-mensaje", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modo: "codeudor", cliente }),
-      });
-      if (!genRes.ok) throw new Error("Error al generar mensaje");
-      const { mensaje } = await genRes.json();
-
-      const tel = String(cliente.codeudor.telefono || "").replace(/\D/g, "");
-      let phone = tel;
-      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
-      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
-
-      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
-      await fetch("/api/whatsapp/send", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telefono: cliente.codeudor.telefono, mensaje, clienteId: cliente.id, cuotaIds,
-          modoManual: true,
-        }),
-      });
-
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
-      window.open(url, "_blank");
-      toast.success(`Abriendo WhatsApp para ${cliente.codeudor.nombre}`);
       qc.invalidateQueries({ queryKey: ["notifs"] });
     } catch (e: any) {
       toast.error(e.message || "Error");
@@ -300,60 +305,6 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
             qc.invalidateQueries({ queryKey: ["dashboard"] });
           }}
         />
-      )}
-
-      {/* === FILA SECUNDARIA: CODEUDOR === */}
-      {cliente.codeudor ? (
-        <div className="mt-2 pt-2 border-t border-border/30 flex items-center gap-3 bg-violet-500/5 -mx-3 -mb-3 px-3 pb-3 rounded-b-xl">
-          <div className="w-7 h-7 rounded-full bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0">
-            <User className="w-3.5 h-3.5" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="font-medium text-sm truncate">{cliente.codeudor.nombre}</p>
-              <Badge variant="outline" className="text-violet-300 border-violet-500/30 text-[10px]">Codeudor</Badge>
-              {cliente.codeudor.parentesco && (
-                <span className="text-[10px] text-muted-foreground">{cliente.codeudor.parentesco}</span>
-              )}
-            </div>
-            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-              <Phone className="w-3 h-3" />
-              {fmtPhone(cliente.codeudor.telefono)}
-            </p>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              size="sm" variant="outline"
-              className="h-7 text-xs text-violet-300 border-violet-500/30 hover:bg-violet-500/10"
-              disabled={!cliente.codeudor.telefono}
-              onClick={abrirWhatsappCodeudor}
-            >
-              <Send className="w-3.5 h-3.5 mr-1" />
-              Notificar
-            </Button>
-            <Button
-              size="sm" variant="ghost"
-              className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
-              onClick={onEditCodeudor} title="Editar codeudor"
-            >
-              <Edit2 className="w-3.5 h-3.5 mr-1" />
-              Editar
-            </Button>
-          </div>
-        </div>
-      ) : (
-        <div className="mt-2 pt-2 border-t border-border/30 flex items-center justify-between">
-          <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
-            <UserPlus className="w-3 h-3" /> Sin codeudor registrado
-          </p>
-          <Button
-            variant="ghost" size="sm"
-            className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
-            onClick={onEditCodeudor}
-          >
-            <UserPlus className="w-3.5 h-3.5 mr-1" /> Registrar Codeudor
-          </Button>
-        </div>
       )}
 
       {/* === FILA TERCIARIA: GARANTES MÚLTIPLES === */}
@@ -1260,5 +1211,148 @@ function EditMontoDialog({ cliente, onClose, onSaved }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ============================================================
+// TARJETA DE CODEUDOR (pestaña "Codeudores")
+// ============================================================
+// Gestiona los codeudores APARTE de los titulares.
+// Cada tarjeta muestra:
+//   - Nombre del codeudor + teléfono + parentesco
+//   - Titular asociado (nombre y código)
+//   - Total a cobrar (heredado del titular)
+//   - Botones: Ver detalle / Notificar por WhatsApp / Editar
+// ============================================================
+
+function CodeudorCard({ cliente, onView, onEditCodeudor }: {
+  cliente: any;
+  onView: () => void;
+  onEditCodeudor: () => void;
+}) {
+  const qc = useQueryClient();
+  const codeudor = cliente.codeudor;
+
+  // === MODO MANUAL: abrir WhatsApp con mensaje pre-cargado para el codeudor ===
+  const abrirWhatsappCodeudor = async () => {
+    try {
+      if (!codeudor?.telefono) {
+        toast.error("El codeudor no tiene teléfono");
+        return;
+      }
+      // Generar mensaje para el codeudor
+      const genRes = await fetch("/api/notificaciones/generar-mensaje", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modo: "codeudor", cliente }),
+      });
+      if (!genRes.ok) throw new Error("Error al generar mensaje");
+      const { mensaje } = await genRes.json();
+
+      // Normalizar teléfono
+      const tel = String(codeudor.telefono).replace(/\D/g, "");
+      let phone = tel;
+      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
+      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
+
+      // Marcar cuotas del TITULAR como notificadas en la DB (no del codeudor)
+      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
+      await fetch("/api/whatsapp/send", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telefono: codeudor.telefono,
+          mensaje,
+          clienteId: cliente.id,
+          cuotaIds,
+          modoManual: true,
+          esCodeudorGarante: true,  // NO marca cuotas del titular como notificadas
+        }),
+      });
+
+      // Abrir WhatsApp con mensaje pre-cargado
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
+      window.open(url, "_blank");
+      toast.success(`Abriendo WhatsApp para ${codeudor.nombre}`);
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+    } catch (e: any) {
+      toast.error(e.message || "Error");
+    }
+  };
+
+  const sinTelefono = !codeudor?.telefono;
+
+  return (
+    <Card className="glass-card p-3 transition-all border-violet-500/20">
+      <div className="flex items-center gap-3">
+        {/* Avatar del codeudor */}
+        <div className="w-10 h-10 rounded-full bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0">
+          <User className="w-5 h-5" />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          {/* Nombre del codeudor + badge */}
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <p className="font-semibold truncate">{codeudor?.nombre || "Sin nombre"}</p>
+            <Badge variant="outline" className="text-violet-300 border-violet-500/30 text-[10px]">
+              Codeudor
+            </Badge>
+            {codeudor?.parentesco && (
+              <span className="text-[10px] text-muted-foreground">{codeudor.parentesco}</span>
+            )}
+          </div>
+
+          {/* Teléfono del codeudor */}
+          <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
+            <Phone className="w-3 h-3" />
+            {sinTelefono
+              ? <span className="text-amber-400">Sin teléfono</span>
+              : fmtPhone(codeudor.telefono)}
+          </p>
+
+          {/* Titular asociado */}
+          <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
+            <span>Titular:</span>
+            <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
+              #{cliente.codigoEntidad}
+            </Badge>
+            <span className="font-medium text-foreground/80 truncate">{cliente.entidad}</span>
+          </div>
+        </div>
+
+        {/* Total a cobrar (heredado del titular) */}
+        <div className="text-right shrink-0">
+          <p className="text-sm font-bold text-amber-400">{fmtGs(cliente.totalGs)}</p>
+          {cliente.totalInteres > 0 && (
+            <p className="text-[9px] text-orange-400/70">
+              +{fmtGs(cliente.totalInteres)} interés
+            </p>
+          )}
+        </div>
+
+        {/* Botones de acción */}
+        <div className="flex flex-col gap-1 shrink-0">
+          <Button variant="ghost" size="sm" onClick={onView} className="h-7 text-xs">
+            <Eye className="w-3.5 h-3.5 mr-1" /> Ver
+          </Button>
+          <Button
+            size="sm" variant="outline"
+            className="h-7 text-xs text-violet-300 border-violet-500/30 hover:bg-violet-500/10"
+            disabled={sinTelefono}
+            onClick={abrirWhatsappCodeudor}
+          >
+            <Send className="w-3.5 h-3.5 mr-1" />
+            Notificar
+          </Button>
+          <Button
+            size="sm" variant="ghost"
+            className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
+            onClick={onEditCodeudor}
+            title="Editar codeudor"
+          >
+            <Edit2 className="w-3.5 h-3.5 mr-1" />
+            Editar
+          </Button>
+        </div>
+      </div>
+    </Card>
   );
 }
