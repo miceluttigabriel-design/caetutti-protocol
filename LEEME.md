@@ -1,144 +1,61 @@
-# FIX DASHBOARD — Caetutti Protocol
+# FIX SUCURSAL DATA — Caetutti Protocol
 
-## 2 problemas resueltos
+## 🎯 El problema
 
-### 1️⃣ Dashboard no funcionaba por sucursal
-**Antes:** La query de `ventasMes` NO respetaba el filtro de sucursal — siempre traía todas las ventas de la empresa, sin importar qué sucursal estuvieras mirando.
+El dashboard por sucursal no muestra números separados aunque el código del dashboard ya filtra correctamente. La causa probable: las cuotas y/o clientes tienen `sucursalId = null` en la base de datos (no se asignó correctamente durante el import).
 
-**Ahora:** Todas las queries (cuotas, clientes, ventasMes, cuotas del mes) respetan el filtro de sucursal seleccionado en el dropdown. Si elegís "NUEVA ESPERANZA", solo cuenta los datos de esa sucursal.
+## 🔍 Cómo diagnosticar
 
-### 2️⃣ "Salud de Cobranza" → "Total % Recuperado del Mes"
-**Antes:** "Salud de Cobranza" calculaba `(totalVendido - totalPendiente) / totalVendido * 100` sobre el total histórico acumulado.
+Después de aplicar este patch y deployear, ejecutá en la consola del navegador (F12, logueado como admin):
 
-**Ahora:** Calcula el **% recuperado dentro del mes actual** (del 01 al último día del mes):
-
-```
-% Recuperado = (monto cobrado del mes / monto total del mes) * 100
-```
-
-Donde:
-- **monto cobrado del mes** = suma de `saldoGs` de cuotas con `fechaVcto` en el mes actual y `estado = "cobrada"`
-- **monto total del mes** = suma de todas las cuotas (cobradas + pendientes) con `fechaVcto` en el mes actual
-- **período** = desde el día 1 del mes actual hasta el último día del mes actual
-
-Ejemplo: hoy es 03/11/2026 → el cálculo considera todas las cuotas con `fechaVcto` entre **01/11/2026** y **30/11/2026**.
-
----
-
-## Archivos a reemplazar
-
-### 1. `src/app/api/dashboard/route.ts` (REEMPLAZAR)
-
-Cambios:
-- ✅ Aplica filtro de sucursal a TODAS las queries (incluyendo `ventasMes`)
-- ✅ Agrega query de `cuotasDelMes` — busca cuotas con `fechaVcto` entre el 01 y el último día del mes actual
-- ✅ Calcula `pctRecuperado`, `montoCobrado`, `montoPendiente`, `montoTotal` para el mes
-- ✅ Retorna objeto `mes` con el período (fechas de inicio/fin) para mostrar en la UI
-- ✅ Respeta filtro de sucursal cuando se selecciona una específica
-
-### 2. `src/components/modules/dashboard.tsx` (REEMPLAZAR)
-
-Cambios:
-- ✅ Reemplaza "Salud de Cobranza" por **"Total % Recuperado del Mes"** con ícono de calendario
-- ✅ Muestra el período activo: `Noviembre 2026 · 01/11/2026 → 30/11/2026`
-- ✅ Muestra monto cobrado, monto pendiente y totales del mes
-- ✅ Muestra conteo de cuotas: `X cobradas · Y pendientes · Z total`
-- ✅ Mensaje de estado: Excelente / Aceptable / Requiere atención / Crítico
-- ✅ Mantiene TODOS los demás elementos: KPIs principales, charts, resumen operativo
-
----
-
-## Pasos para aplicar
-
-### 1️⃣ Descargá y descomprimí este ZIP
-
-### 2️⃣ Copiar los 2 archivos a tu repo local
-
-**Archivo 1 (reemplazar existente):**
-```
-src/app/api/dashboard/route.ts
-→ ...caetutti-protocol\src\app\api\dashboard\route.ts
+```javascript
+fetch('/api/admin/diagnosticar-sucursales')
+.then(r => r.json())
+.then(data => console.log('🔍 DIAGNÓSTICO:', data))
+.catch(e => console.error('❌ Error:', e));
 ```
 
-**Archivo 2 (reemplazar existente):**
-```
-src/components/modules/dashboard.tsx
-→ ...caetutti-protocol\src\components\modules\dashboard.tsx
-```
+Vas a ver:
+- Lista de sucursales con ID, nombre y conteo de clientes/cuotas
+- Cuántos clientes y cuotas tienen `sucursalId = null`
+- Cuántos se pueden reparar tomando el sucursalId del cliente
+- Lista de problemas detectados
 
-### 3️⃣ GitHub Desktop — verás 2 archivos:
-- `src/app/api/dashboard/route.ts` (modificado)
-- `src/components/modules/dashboard.tsx` (modificado)
+## 🔧 Cómo reparar
 
-### 4️⃣ Commit + Push:
-- Mensaje: `feat: dashboard por sucursal + % recuperado del mes actual`
-- **Commit to main** → **Push origin**
+Si el diagnóstico muestra `❌ X cuotas sin sucursalId asignado`, ejecutá:
 
-### 5️⃣ Esperá 2-3 min a que Vercel redeploye
-
----
-
-## ✅ Cómo verificar que funciona
-
-### Dashboard por sucursal
-
-1. Andá al dashboard principal
-2. En el dropdown de sucursales (arriba a la derecha), elegí una sucursal específica (ej: NUEVA ESPERANZA)
-3. Los KPIs deben reflejar SOLO los datos de esa sucursal:
-   - Total Pendiente
-   - Tasa de Cobranza (sobre el vendido de ESA sucursal)
-   - Crítico (+30 días)
-   - Clientes Activos
-4. Cambiá a otra sucursal → los números deben cambiar
-5. Cambiá a "Todas las sucursales" → muestra el total agregado
-
-### % Recuperado del Mes
-
-1. En el dashboard vas a ver la nueva barra: **"Total % Recuperado del Mes"**
-2. Debajo del porcentaje, vas a ver el período activo:
-   ```
-   noviembre 2026 · 01/11/2026 → 30/11/2026
-   ```
-3. A la derecha vas a ver:
-   ```
-   Cobrado del mes: ₲ X
-   Pendiente del mes: ₲ Y
-   A cobradas · B pendientes · C total
-   ```
-4. El porcentaje se calcula: `cobrado / (cobrado + pendiente) * 100`
-
-### Lógica del cálculo
-
-- **Cuota "cobrada" del mes**: tiene `fechaVcto` en el mes actual y `estado = "cobrada"`
-- **Cuota "pendiente" del mes**: tiene `fechaVcto` en el mes actual y `estado = "pendiente"`
-- **% recuperado** = monto cobrado / monto total * 100
-
-> Importante: las cuotas se marcan como "cobradas" cuando no vienen en una nueva importación del Excel (el cliente ya pagó) o cuando el saldo es 0. Por eso, mientras más importes el Excel actualizado, más preciso va a ser el % recuperado.
-
----
-
-## 📋 Ejemplo visual
-
-```
-┌─────────────────────────────────────────────────────────┐
-│ 📅 TOTAL % RECUPERADO DEL MES                  72.5%    │
-│ noviembre 2026 · 01/11/2026 → 30/11/2026                │
-│                                          Cobrado del mes│
-│ ████████████████░░░░░░░░░░░░░░░░         ₲ 1.2B         │
-│                                          Pendiente del mes│
-│ ⚠ Recuperación aceptable · sobre ₲ 1.7B   ₲ 500M       │
-│ totales del mes                           234 cobradas  │
-│                                           · 89 pendientes│
-│                                           · 323 total   │
-└─────────────────────────────────────────────────────────┘
+```javascript
+fetch('/api/admin/diagnosticar-sucursales', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ arreglar: true })
+})
+.then(r => r.json())
+.then(data => console.log('🔧 REPARACIÓN:', data))
+.catch(e => console.error('❌ Error:', e));
 ```
 
----
+Esto repará en 3 fases:
+1. **Fase 1**: Cuotas con `sucursalId=null` cuyo cliente SÍ tiene sucursal → copia el sucursalId del cliente
+2. **Fase 2**: Clientes con `sucursalId=null` cuyas cuotas SÍ tienen sucursal → copia de la primera cuota
+3. **Fase 3**: Los que siguen sin sucursal → los asigna a "Principal"
 
-## Lo que NO se tocó
+Después refrescá la página (F5) y el dashboard por sucursal va a funcionar.
 
-- ✅ KPIs principales (Total Pendiente, Tasa de Cobranza, Crítico, Clientes Activos) — sin cambios
-- ✅ Charts (Distribución por Antigüedad, Cuotas por Tramo) — sin cambios
-- ✅ Resumen operativo (Notificadas, Sin Notificar, Recordatorios, Notifs. Enviadas) — sin cambios
-- ✅ Recálculo automático de interés y días — sin cambios
-- ✅ Filtro de sucursal del usuario (no admin) — sin cambios (sigue limitado a su sucursal)
+## Archivo a agregar
+
+```
+src/app/api/admin/diagnosticar-sucursales/route.ts  (NUEVO)
+```
+
+## Pasos
+
+1. Descargar y descomprimir este ZIP
+2. Copiar `src/app/api/admin/diagnosticar-sucursales/route.ts` al repo local
+3. GitHub Desktop → 1 archivo nuevo
+4. Commit: `feat: endpoint diagnosticar y reparar sucursalId en cuotas/clientes`
+5. Push origin → esperá 2-3 min a que Vercel redeploye
+6. Ejecutá el GET para diagnosticar
+7. Ejecutá el POST con `{arreglar: true}` para reparar
+8. Refrescá la página → el dashboard por sucursal va a funcionar
