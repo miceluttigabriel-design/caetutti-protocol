@@ -129,7 +129,7 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
           </Card>
         )}
         {/* === PESTAÑA TITULARES: lista de clientes (sin la fila de codeudor debajo) === */}
-        {!isLoading && tab === "titulares" && filtered.slice(0, 100).map((c) => (
+        {!isLoading && tab === "titulares" && filtered.map((c) => (
           <NotifCard
             key={c.id}
             cliente={c}
@@ -171,7 +171,7 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
                 </p>
               </Card>
             ) : (
-              filtered.filter((c) => c.codeudor).slice(0, 100).map((c) => (
+              filtered.filter((c) => c.codeudor).map((c) => (
                 <CodeudorCard
                   key={`cod-${c.id}`}
                   cliente={c}
@@ -182,9 +182,9 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
             )}
           </>
         )}
-        {filtered.length > 100 && (
+        {filtered.length > 0 && (
           <p className="text-center text-xs text-muted-foreground py-2">
-            Mostrando 100 de {filtered.length} — usa el buscador para filtrar
+            Total: {filtered.length} cliente(s) {tab === "codeudores" && `· ${filtered.filter((c) => c.codeudor).length} codeudor(es)`}
           </p>
         )}
       </div>
