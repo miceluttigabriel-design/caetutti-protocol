@@ -16,11 +16,14 @@ import { fmtGs, fmtPhone, diasEstado, fmtRelative, fmtDateTime, fmtDate } from "
 import { toast } from "sonner";
 
 export function NotificacionesModule({ sucursal }: { sucursal: string }) {
+  const qc = useQueryClient();
   const [ocultarNotificados, setOcultarNotificados] = useState(false);
   const [search, setSearch] = useState("");
   const [viewing, setViewing] = useState<any | null>(null);
   const [viewingModo, setViewingModo] = useState<"cliente" | "codeudor">("cliente");
   const [editingCodeudor, setEditingCodeudor] = useState<any | null>(null);
+  // Para crear un nuevo codeudor desde la pestaña "Codeudores" (busca titular primero)
+  const [nuevoCodeudor, setNuevoCodeudor] = useState(false);
   // Pestaña activa: "titulares" (clientes) o "codeudores" (gestión aparte)
   const [tab, setTab] = useState<"titulares" | "codeudores">("titulares");
 
@@ -134,14 +137,51 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
           />
         ))}
         {/* === PESTAÑA CODEUDORES: lista de codeudores (gestión aparte) === */}
-        {!isLoading && tab === "codeudores" && filtered.filter((c) => c.codeudor).slice(0, 100).map((c) => (
-          <CodeudorCard
-            key={`cod-${c.id}`}
-            cliente={c}
-            onView={() => { setViewingModo("codeudor"); setViewing(c); }}
-            onEditCodeudor={() => setEditingCodeudor(c)}
-          />
-        ))}
+        {!isLoading && tab === "codeudores" && (
+          <>
+            {/* Botón para registrar nuevo codeudor */}
+            <Card className="glass-card p-3 border-violet-500/30 bg-violet-500/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-violet-300">Gestión de Codeudores</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {filtered.filter((c) => c.codeudor).length} codeudor(es) registrado(s) · Podés registrar uno nuevo buscando al titular
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-violet-500 hover:bg-violet-600 text-white"
+                  onClick={() => setNuevoCodeudor(true)}
+                >
+                  <UserPlus className="w-3.5 h-3.5 mr-1" />
+                  Registrar Codeudor
+                </Button>
+              </div>
+            </Card>
+
+            {/* Lista de codeudores existentes */}
+            {filtered.filter((c) => c.codeudor).length === 0 ? (
+              <Card className="glass-card p-8 text-center">
+                <UserPlus className="w-10 h-10 mx-auto mb-3 text-violet-400/50" />
+                <p className="text-sm text-muted-foreground">
+                  No hay codeudores registrados.
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  Hacé clic en "Registrar Codeudor" para crear uno nuevo.
+                </p>
+              </Card>
+            ) : (
+              filtered.filter((c) => c.codeudor).slice(0, 100).map((c) => (
+                <CodeudorCard
+                  key={`cod-${c.id}`}
+                  cliente={c}
+                  onView={() => { setViewingModo("codeudor"); setViewing(c); }}
+                  onEditCodeudor={() => setEditingCodeudor(c)}
+                />
+              ))
+            )}
+          </>
+        )}
         {filtered.length > 100 && (
           <p className="text-center text-xs text-muted-foreground py-2">
             Mostrando 100 de {filtered.length} — usa el buscador para filtrar
@@ -161,6 +201,17 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
         <CodeudorDialog
           cliente={editingCodeudor}
           onClose={() => setEditingCodeudor(null)}
+        />
+      )}
+
+      {nuevoCodeudor && (
+        <NuevoCodeudorDialog
+          onClose={() => setNuevoCodeudor(false)}
+          onCreado={() => {
+            setNuevoCodeudor(false);
+            qc.invalidateQueries({ queryKey: ["notifs"] });
+            qc.invalidateQueries({ queryKey: ["clientes"] });
+          }}
         />
       )}
     </div>
@@ -306,332 +357,7 @@ function NotifCard({ cliente, onView }: {
           }}
         />
       )}
-
-      {/* === FILA TERCIARIA: GARANTES MÚLTIPLES === */}
-      <GarantesSection cliente={cliente} />
     </Card>
-  );
-}
-
-// ============================================================
-// SECCIÓN DE GARANTES MÚLTIPLES
-// ============================================================
-
-function GarantesSection({ cliente }: { cliente: any }) {
-  const qc = useQueryClient();
-  const [showAgregar, setShowAgregar] = useState(false);
-  const [editingGarante, setEditingGarante] = useState<any | null>(null);
-  const [nuevoGarante, setNuevoGarante] = useState({
-    garanteNombre: "",
-    garanteTelefono: "",
-    garanteCi: "",
-    garanteParentesco: "",
-  });
-  const [saving, setSaving] = useState(false);
-
-  const garantes = cliente.garantes || [];
-
-  const agregarGarante = async () => {
-    if (!nuevoGarante.garanteNombre.trim()) {
-      toast.error("El nombre del garante es obligatorio");
-      return;
-    }
-    setSaving(true);
-    try {
-      const r = await fetch(`/api/clientes/${cliente.id}/garantes`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          garanteNombre: nuevoGarante.garanteNombre.trim(),
-          garanteTelefono: nuevoGarante.garanteTelefono.trim(),
-          garanteCi: nuevoGarante.garanteCi.trim(),
-          garanteParentesco: nuevoGarante.garanteParentesco.trim(),
-        }),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.error || `Error HTTP ${r.status}`);
-      }
-      const data = await r.json();
-      toast.success(data.msg || "Garante agregado");
-      setNuevoGarante({ garanteNombre: "", garanteTelefono: "", garanteCi: "", garanteParentesco: "" });
-      setShowAgregar(false);
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["clientes"] });
-    } catch (e: any) {
-      toast.error(e.message || "Error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const actualizarGarante = async (garanteId: string, datos: any) => {
-    setSaving(true);
-    try {
-      const r = await fetch(`/api/clientes/${cliente.id}/garantes/${garanteId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(datos),
-      });
-      if (!r.ok) {
-        const err = await r.json().catch(() => ({}));
-        throw new Error(err.error || `Error HTTP ${r.status}`);
-      }
-      const data = await r.json();
-      toast.success(data.msg || "Garante actualizado");
-      setEditingGarante(null);
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["clientes"] });
-    } catch (e: any) {
-      toast.error(e.message || "Error");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const eliminarGarante = async (garanteId: string, nombre: string) => {
-    if (!confirm(`¿Eliminar el garante ${nombre}?`)) return;
-    setSaving(true);
-    try {
-      const r = await fetch(`/api/clientes/${cliente.id}/garantes/${garanteId}`, { method: "DELETE" });
-      if (!r.ok) throw new Error();
-      toast.success("Garante eliminado");
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["clientes"] });
-    } catch {
-      toast.error("Error al eliminar");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const abrirWhatsappGarante = async (garante: any) => {
-    if (!garante.garanteTelefono) {
-      toast.error("Este garante no tiene teléfono");
-      return;
-    }
-    // Generar mensaje para el garante
-    try {
-      const genRes = await fetch("/api/notificaciones/generar-mensaje", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modo: "codeudor", cliente }),
-      });
-      if (!genRes.ok) throw new Error("Error al generar mensaje");
-      const { mensaje } = await genRes.json();
-
-      const tel = String(garante.garanteTelefono).replace(/\D/g, "");
-      let phone = tel;
-      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
-      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
-
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
-      window.open(url, "_blank");
-      toast.success(`Abriendo WhatsApp para ${garante.garanteNombre}`);
-    } catch (e: any) {
-      toast.error(e.message || "Error");
-    }
-  };
-
-  if (garantes.length === 0 && !showAgregar) {
-    return (
-      <div className="mt-2 pt-2 border-t border-border/30 flex items-center justify-between">
-        <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
-          <UserPlus className="w-3 h-3" /> Sin garantes adicionales
-        </p>
-        <Button
-          variant="ghost" size="sm"
-          className="h-7 text-xs text-sky-300 hover:bg-sky-500/10"
-          onClick={() => setShowAgregar(true)}
-        >
-          <UserPlus className="w-3.5 h-3.5 mr-1" /> Agregar Garante
-        </Button>
-      </div>
-    );
-  }
-
-  return (
-    <>
-      {/* Lista de garantes */}
-      {garantes.length > 0 && (
-        <div className="mt-2 pt-2 border-t border-border/30 space-y-1.5">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-[10px] font-semibold text-sky-300 uppercase tracking-wider flex items-center gap-1">
-              <UserPlus className="w-3 h-3" /> Garantes ({garantes.length})
-            </p>
-            <Button
-              variant="ghost" size="sm"
-              className="h-6 text-[11px] text-sky-300 hover:bg-sky-500/10 px-2"
-              onClick={() => setShowAgregar(true)}
-            >
-              <UserPlus className="w-3 h-3 mr-1" /> Agregar
-            </Button>
-          </div>
-          {garantes.map((g: any, idx: number) => (
-            <div key={g.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-sky-500/5 border border-sky-500/15">
-              <div className="w-6 h-6 rounded-full bg-sky-500/20 text-sky-300 flex items-center justify-center shrink-0 text-[10px] font-bold">
-                {idx + 1}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <p className="font-medium text-xs truncate">{g.garanteNombre}</p>
-                  <Badge variant="outline" className="text-sky-300 border-sky-500/30 text-[9px] py-0">
-                    Garante
-                  </Badge>
-                  {g.garanteParentesco && (
-                    <span className="text-[10px] text-muted-foreground">{g.garanteParentesco}</span>
-                  )}
-                </div>
-                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                  <Phone className="w-2.5 h-2.5" />
-                  {g.garanteTelefono ? fmtPhone(g.garanteTelefono) : <span className="text-amber-400">Sin teléfono</span>}
-                  {g.garanteCi && <span className="ml-2">· CI: {g.garanteCi}</span>}
-                </p>
-              </div>
-              <div className="flex items-center gap-0.5 shrink-0">
-                {editingGarante?.id === g.id ? (
-                  <GaranteEditInline
-                    garante={g}
-                    saving={saving}
-                    onGuardar={(datos) => actualizarGarante(g.id, datos)}
-                    onCancelar={() => setEditingGarante(null)}
-                  />
-                ) : (
-                  <>
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-6 w-6 p-0 text-sky-300 hover:bg-sky-500/10"
-                      disabled={!g.garanteTelefono}
-                      onClick={() => abrirWhatsappGarante(g)}
-                      title="Notificar por WhatsApp"
-                    >
-                      <Send className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-6 w-6 p-0 text-sky-300 hover:bg-sky-500/10"
-                      onClick={() => setEditingGarante(g)}
-                      title="Editar garante"
-                    >
-                      <Edit2 className="w-3 h-3" />
-                    </Button>
-                    <Button
-                      size="sm" variant="ghost"
-                      className="h-6 w-6 p-0 text-red-400 hover:bg-red-500/10"
-                      disabled={saving}
-                      onClick={() => eliminarGarante(g.id, g.garanteNombre)}
-                      title="Eliminar garante"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </Button>
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Formulario para agregar nuevo garante */}
-      {showAgregar && (
-        <div className="mt-2 pt-2 border-t border-border/30 p-3 rounded-lg bg-sky-500/5 border border-sky-500/20 space-y-2">
-          <p className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Nuevo Garante</p>
-          <Input
-            placeholder="Nombre completo *"
-            value={nuevoGarante.garanteNombre}
-            onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteNombre: e.target.value })}
-          />
-          <div className="grid grid-cols-2 gap-2">
-            <Input
-              placeholder="Teléfono (opcional)"
-              value={nuevoGarante.garanteTelefono}
-              onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteTelefono: e.target.value })}
-            />
-            <Input
-              placeholder="CI (opcional)"
-              value={nuevoGarante.garanteCi}
-              onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteCi: e.target.value })}
-            />
-          </div>
-          <Input
-            placeholder="Parentesco (Esposo/a, Padre, etc.)"
-            value={nuevoGarante.garanteParentesco}
-            onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteParentesco: e.target.value })}
-          />
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowAgregar(false)}>
-              Cancelar
-            </Button>
-            <Button
-              size="sm" className="h-7 text-xs glow-primary"
-              onClick={agregarGarante}
-              disabled={saving || !nuevoGarante.garanteNombre.trim()}
-            >
-              {saving ? "Guardando…" : "💾 Agregar Garante"}
-            </Button>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-// ============================================================
-// EDICIÓN INLINE DE GARANTE
-// ============================================================
-function GaranteEditInline({ garante, saving, onGuardar, onCancelar }: {
-  garante: any;
-  saving: boolean;
-  onGuardar: (datos: any) => void;
-  onCancelar: () => void;
-}) {
-  const [form, setForm] = useState({
-    garanteNombre: garante.garanteNombre || "",
-    garanteTelefono: garante.garanteTelefono || "",
-    garanteCi: garante.garanteCi || "",
-    garanteParentesco: garante.garanteParentesco || "",
-  });
-
-  return (
-    <div className="flex flex-col gap-1 w-full p-2 rounded-lg bg-sky-500/10 border border-sky-500/30">
-      <Input
-        className="h-7 text-xs"
-        placeholder="Nombre *"
-        value={form.garanteNombre}
-        onChange={(e) => setForm({ ...form, garanteNombre: e.target.value })}
-      />
-      <div className="grid grid-cols-2 gap-1">
-        <Input
-          className="h-7 text-xs"
-          placeholder="Teléfono"
-          value={form.garanteTelefono}
-          onChange={(e) => setForm({ ...form, garanteTelefono: e.target.value })}
-        />
-        <Input
-          className="h-7 text-xs"
-          placeholder="CI"
-          value={form.garanteCi}
-          onChange={(e) => setForm({ ...form, garanteCi: e.target.value })}
-        />
-      </div>
-      <Input
-        className="h-7 text-xs"
-        placeholder="Parentesco"
-        value={form.garanteParentesco}
-        onChange={(e) => setForm({ ...form, garanteParentesco: e.target.value })}
-      />
-      <div className="flex gap-1">
-        <Button size="sm" variant="outline" className="h-6 text-xs flex-1" onClick={onCancelar}>
-          Cancelar
-        </Button>
-        <Button
-          size="sm" className="h-6 text-xs flex-1 glow-primary"
-          disabled={saving || !form.garanteNombre.trim()}
-          onClick={() => onGuardar(form)}
-        >
-          {saving ? "…" : "💾 Guardar"}
-        </Button>
-      </div>
-    </div>
   );
 }
 
@@ -1354,5 +1080,242 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
         </div>
       </div>
     </Card>
+  );
+}
+
+// ============================================================
+// DIALOG: NUEVO CODEUDOR (buscar titular + registrar codeudor)
+// ============================================================
+// Flujo:
+//   1. Buscar y seleccionar el cliente titular
+//   2. Llenar los datos del codeudor (nombre, teléfono, CI, parentesco)
+//   3. Guardar con PUT /api/clientes/{titularId}/codeudor
+// ============================================================
+
+function NuevoCodeudorDialog({ onClose, onCreado }: {
+  onClose: () => void;
+  onCreado: () => void;
+}) {
+  const qc = useQueryClient();
+  const [paso, setPaso] = useState<1 | 2>(1);
+  const [titularSeleccionado, setTitularSeleccionado] = useState<any | null>(null);
+  const [busqueda, setBusqueda] = useState("");
+  const [form, setForm] = useState({
+    codeudorNombre: "",
+    codeudorTelefono: "",
+    codeudorCi: "",
+    codeudorParentesco: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Buscar clientes existentes para vincular como titular
+  const { data: sugeridos, isFetching: buscando } = useQuery({
+    queryKey: ["buscar-titular", busqueda],
+    queryFn: async () => {
+      if (busqueda.length < 2) return { clientes: [] };
+      const r = await fetch(`/api/clientes/buscar?q=${encodeURIComponent(busqueda)}`);
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+    enabled: busqueda.length >= 2,
+  });
+
+  function seleccionarTitular(s: any) {
+    setTitularSeleccionado(s);
+    setBusqueda("");
+    setPaso(2);
+  }
+
+  async function guardar() {
+    const nombreTrim = (form.codeudorNombre || "").trim();
+    if (!nombreTrim) {
+      toast.error("El nombre del codeudor es obligatorio");
+      return;
+    }
+    if (!titularSeleccionado?.id) {
+      toast.error("Tenés que seleccionar un titular primero");
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        codeudorNombre: nombreTrim,
+        codeudorTelefono: (form.codeudorTelefono || "").trim(),
+        codeudorCi: (form.codeudorCi || "").trim(),
+        codeudorParentesco: (form.codeudorParentesco || "").trim(),
+      };
+      const r = await fetch(`/api/clientes/${titularSeleccionado.id}/codeudor`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!r.ok) {
+        const errText = await r.text();
+        let errMsg = `Error HTTP ${r.status}`;
+        try {
+          const errData = JSON.parse(errText);
+          errMsg = errData.error || errMsg;
+        } catch {}
+        throw new Error(errMsg);
+      }
+      const data = await r.json();
+      toast.success(data?.msg || "Codeudor registrado correctamente");
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["clientes"] });
+      onCreado();
+    } catch (e: any) {
+      toast.error(e.message || "Error al guardar el codeudor");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <UserPlus className="w-4 h-4 text-violet-400" />
+            Registrar Nuevo Codeudor
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Paso {paso} de 2 · {paso === 1 ? "Buscar titular" : "Datos del codeudor"}
+          </p>
+        </DialogHeader>
+
+        {/* Indicador de pasos */}
+        <div className="flex gap-1 mb-2">
+          <div className={`flex-1 h-1 rounded-full ${paso >= 1 ? "bg-violet-500" : "bg-secondary"}`} />
+          <div className={`flex-1 h-1 rounded-full ${paso >= 2 ? "bg-violet-500" : "bg-secondary"}`} />
+        </div>
+
+        {paso === 1 && (
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs">Buscar titular (cliente) al que se vinculará el codeudor</Label>
+              <Input
+                placeholder="Nombre, código, CI o teléfono…"
+                value={busqueda}
+                onChange={(e) => setBusqueda(e.target.value)}
+                autoFocus
+              />
+              <p className="text-[10px] text-muted-foreground mt-1">Escribí al menos 2 caracteres</p>
+            </div>
+
+            {/* Resultados de búsqueda */}
+            <div className="max-h-72 overflow-y-auto space-y-1 border border-border/40 rounded-lg p-1">
+              {busqueda.length < 2 && (
+                <p className="text-xs text-muted-foreground text-center py-4">Empezá a escribir para buscar</p>
+              )}
+              {busqueda.length >= 2 && buscando && (
+                <p className="text-xs text-muted-foreground text-center py-4">Buscando…</p>
+              )}
+              {busqueda.length >= 2 && !buscando && sugeridos?.clientes?.length === 0 && (
+                <p className="text-xs text-muted-foreground text-center py-4">Sin resultados</p>
+              )}
+              {sugeridos?.clientes?.map((s: any) => (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => seleccionarTitular(s)}
+                  className="w-full text-left p-2 rounded hover:bg-secondary/60 text-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary shrink-0">
+                      #{s.codigoEntidad}
+                    </Badge>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium truncate">{s.entidad}</p>
+                      <p className="text-[10px] text-muted-foreground">
+                        {fmtPhone(s.telefono)} · {s.localidad || "—"}
+                      </p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={onClose}>Cancelar</Button>
+            </DialogFooter>
+          </div>
+        )}
+
+        {paso === 2 && titularSeleccionado && (
+          <div className="space-y-3">
+            {/* Titular seleccionado */}
+            <div className="p-2 rounded-lg bg-primary/5 border border-primary/20">
+              <p className="text-[10px] text-muted-foreground uppercase">Titular seleccionado</p>
+              <div className="flex items-center gap-2 mt-1">
+                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
+                  #{titularSeleccionado.codigoEntidad}
+                </Badge>
+                <p className="text-sm font-medium truncate">{titularSeleccionado.entidad}</p>
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1">
+                {fmtPhone(titularSeleccionado.telefono)} · {titularSeleccionado.localidad || "—"}
+              </p>
+              <button
+                type="button"
+                onClick={() => { setPaso(1); setTitularSeleccionado(null); }}
+                className="text-[10px] text-violet-400 hover:underline mt-1"
+              >
+                ← Cambiar titular
+              </button>
+            </div>
+
+            {/* Datos del codeudor */}
+            <div className="space-y-3 border-t border-border/30 pt-3">
+              <div>
+                <Label className="text-xs">Nombre del codeudor *</Label>
+                <Input
+                  value={form.codeudorNombre}
+                  onChange={(e) => setForm({ ...form, codeudorNombre: e.target.value })}
+                  placeholder="Ej: JUAN PEREZ"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <Label className="text-xs">Teléfono (opcional)</Label>
+                <Input
+                  value={form.codeudorTelefono}
+                  onChange={(e) => setForm({ ...form, codeudorTelefono: e.target.value })}
+                  placeholder="0981123456 — podés dejar vacío"
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <Label className="text-xs">CI</Label>
+                  <Input
+                    value={form.codeudorCi}
+                    onChange={(e) => setForm({ ...form, codeudorCi: e.target.value })}
+                    placeholder="1234567"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs">Parentesco</Label>
+                  <Input
+                    value={form.codeudorParentesco}
+                    onChange={(e) => setForm({ ...form, codeudorParentesco: e.target.value })}
+                    placeholder="Esposo/a, Padre…"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPaso(1)}>← Atrás</Button>
+              <Button
+                onClick={guardar}
+                disabled={saving || !form.codeudorNombre.trim()}
+                className="bg-violet-500 hover:bg-violet-600 text-white"
+              >
+                {saving ? "Guardando…" : "💾 Registrar Codeudor"}
+              </Button>
+            </DialogFooter>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
