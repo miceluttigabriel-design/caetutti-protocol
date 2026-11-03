@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Plus, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2 } from "lucide-react";
+import { Search, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2, Building2 } from "lucide-react";
 import { fmtGs, fmtPhone, fmtRelative, fmtDateTime } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -20,9 +20,21 @@ export function ClientesModule() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [pagina, setPagina] = useState(1);
+  const [sucursalSel, setSucursalSel] = useState<string>("todas");
   const [editing, setEditing] = useState<any | null>(null);
   const [viewing, setViewing] = useState<any | null>(null);
-  const [showCreate, setShowCreate] = useState(false);
+
+  // Lista de sucursales para el filtro (cache largo — no cambia casi nunca)
+  const { data: sucData } = useQuery({
+    queryKey: ["sucursales"],
+    queryFn: async () => {
+      const r = await fetch("/api/sucursales");
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+    staleTime: 30 * 60 * 1000,
+  });
+  const sucursales = sucData?.sucursales || [];
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["clientes"],
@@ -37,7 +49,9 @@ export function ClientesModule() {
     refetchOnWindowFocus: false,
   });
 
+  // Filtro por sucursal + búsqueda
   const clientes = (data?.clientes || []).filter((c: any) => {
+    if (sucursalSel !== "todas" && c.sucursalId !== sucursalSel) return false;
     const q = search.toLowerCase();
     return !q
       || c.entidad?.toLowerCase().includes(q)
@@ -65,9 +79,19 @@ export function ClientesModule() {
             className="pl-9 glass-card"
           />
         </div>
-        <Button onClick={() => setShowCreate(true)} className="glow-primary">
-          <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
-        </Button>
+        {/* Filtro por sucursal */}
+        <Select value={sucursalSel} onValueChange={(v) => { setSucursalSel(v); setPagina(1); }}>
+          <SelectTrigger className="w-full sm:w-52 glass-card">
+            <Building2 className="w-3.5 h-3.5 mr-1.5 text-primary" />
+            <SelectValue placeholder="Todas las sucursales" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Todas las sucursales</SelectItem>
+            {sucursales.map((s: any) => (
+              <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {isFetching && !isLoading && (
           <span className="self-center text-xs text-muted-foreground animate-pulse">actualizando…</span>
         )}
@@ -198,14 +222,6 @@ export function ClientesModule() {
         />
       )}
 
-      {/* Create dialog */}
-      {showCreate && (
-        <ClienteDialog
-          onClose={() => setShowCreate(false)}
-          onSaved={() => { qc.invalidateQueries({ queryKey: ["clientes"] }); setShowCreate(false); }}
-        />
-      )}
-
       {/* View dialog */}
       {viewing && <ClienteDetalle cliente={viewing} onClose={() => setViewing(null)} />}
     </div>
@@ -298,16 +314,17 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
 
   const save = useMutation({
     mutationFn: async () => {
-      const url = cliente ? `/api/clientes/${cliente.id}` : "/api/clientes";
-      const method = cliente ? "PUT" : "POST";
-      const r = await fetch(url, {
-        method, headers: { "Content-Type": "application/json" },
+      // Solo edición: el alta de clientes se hace automáticamente
+      // al registrar un codeudor desde la pestaña Notificaciones.
+      const r = await fetch(`/api/clientes/${cliente.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!r.ok) throw new Error((await r.json()).error || "Error");
       return r.json();
     },
-    onSuccess: () => { toast.success(cliente ? "Cliente actualizado" : "Cliente creado"); onSaved(); },
+    onSuccess: () => { toast.success("Cliente actualizado"); onSaved(); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -315,11 +332,11 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{cliente ? "Editar Cliente" : "Nuevo Cliente"}</DialogTitle>
+          <DialogTitle>Editar Cliente</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
-          <Field label="Código Entidad *">
-            <Input value={form.codigoEntidad} onChange={(e) => setForm({...form, codigoEntidad: e.target.value})} disabled={!!cliente} />
+          <Field label="Código Entidad">
+            <Input value={form.codigoEntidad} onChange={(e) => setForm({...form, codigoEntidad: e.target.value})} disabled />
           </Field>
           <Field label="Nombre / Entidad *">
             <Input value={form.entidad} onChange={(e) => setForm({...form, entidad: e.target.value})} />
@@ -424,7 +441,7 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending || !form.codigoEntidad || !form.entidad}>
+          <Button onClick={() => save.mutate()} disabled={save.isPending || !form.entidad}>
             {save.isPending ? "Guardando…" : "Guardar"}
           </Button>
         </DialogFooter>

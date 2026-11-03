@@ -1,71 +1,66 @@
-# ⚡ FIX VELOCIDAD — Carga de Clientes (y bonus: eliminar usuarios demo)
-
-## ¿Por qué estaba lento?
-
-El endpoint `/api/clientes` hacía **~8.500 consultas a la base de datos en cada carga**
-(3 consultas por cada cliente: saldo, última notificación, estado notificado × 2.824 clientes).
-Con Neon en EE.UU. eso tardaba 30–120 segundos o expiraba → la página quedaba en 0.
-
-Además, cada vez que cambiabas de pestaña y volvías, TODO se recargaba de nuevo.
+# 🤝 Codeudor como entidad + Filtro por sucursal en Clientes
 
 ## ¿Qué cambia este patch?
 
-| Archivo | Cambio |
-|---|---|
-| `src/app/api/clientes/route.ts` | **De ~8.500 consultas → 4 consultas totales** (groupBy + cruce en memoria). Misma respuesta, mismo formato. |
-| `src/components/modules/clientes.tsx` | **Paginación: 50 clientes por página** (con buscador, stats sobre el total) + **cache de 5 minutos** (cambiar de pestaña ya no recarga) + indicador "actualizando…". |
-| `src/lib/db.ts` | En producción ya no loguea cada query SQL (ahorraba CPU/memoria con miles de consultas). |
-| `src/app/api/admin/optimizar-db/route.ts` | **NUEVO** — crea índices en la BD para acelerar Clientes, Notificaciones y Dashboard. |
+### 1) ❌ Quitar botón "Nuevo Cliente" de la pestaña Clientes
+- Ya no vas a ver el botón **+ Nuevo Cliente** arriba a la derecha en Clientes.
+- Los clientes se crean de dos formas: por **importación de Excel** (los titulares) y **automáticamente al registrar un codeudor** desde Notificaciones.
+- La edición de cliente (lápiz) sigue funcionando igual.
 
-**Tiempo esperado de carga después del fix: 2–4 segundos** (antes 30s+ o timeout).
+### 2) 🤝 Codeudor se registra como entidad Cliente automáticamente
+- Cuando registrás un codeudor en **Notificaciones → Codeudores → Registrar Codeudor**,
+  además de guardar los datos en el titular, **se crea un nuevo registro en la tabla Cliente**
+  con `codigoEntidad = "GAR-{codigoTitular}"` (ej: si el titular es `001234`, el codeudor queda como `GAR-001234`).
+- El codeudor hereda la sucursal, vendedor y cobrador del titular.
+- Vas a verlo en la pestaña **Clientes** como una entidad más.
+- Si ya existe un codeudor con ese código (porque lo registraste antes), se **actualizan** sus datos.
+- Si eliminás el codeudor desde el titular, también se elimina la entidad creada.
+
+### 3) 🏢 Filtro por sucursal en la pestaña Clientes
+- Arriba, al lado del buscador, ahora hay un selector **"Todas las sucursales"**.
+- Al elegir una sucursal, la tabla, las tarjetas de estadísticas y el paginador se recalculan
+  sobre los clientes de esa sucursal.
+- Elegí "Todas las sucursales" para ver todo igual que antes.
 
 ---
 
-## PASO 1 — Instalar el patch
+## 📦 Instalación (igual que siempre)
 
-1. Descomprimí `fix-velocidad-clientes.zip`
+1. Descomprimí `fix-codeudor-sucursal.zip`
 2. Copiá las carpetas `src/` dentro de la raíz del repo
    `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
-   (se reemplazan 3 archivos y se agrega 1 nuevo)
-3. En GitHub Desktop → commit (ej: "⚡ Optimizar velocidad Clientes") → **Push origin**
+   (se reemplazan 2 archivos)
+3. En GitHub Desktop → commit (ej: "🤝 Codeudor como entidad + filtro sucursal") → **Push origin**
 4. Esperá 2–3 minutos al redeploy de Vercel
 
-## PASO 2 — Probar
+## ✅ Cómo probar
 
-Entrá a **Clientes** en https://caetutti-protocol.vercel.app.
-Debería cargar en pocos segundos y mostrar el paginador abajo:
-`Mostrando 1–50 de 2824 clientes · Página 1 de 57`
+### Codeudor → entidad:
+1. Andá a **Notificaciones → pestaña Codeudores → Registrar Codeudor**
+2. Buscá un titular, completá nombre/teléfono/CI/parentesco → **💾 Registrar Codeudor**
+3. Andá a **Clientes** y buscá por el nombre del codeudor (o por `GAR-` para ver todos)
+4. Debería aparecer como entidad propia con su teléfono, su sucursal, etc.
 
-## PASO 3 (una sola vez) — Crear índices en la BD
+### Filtro por sucursal:
+1. En **Clientes**, abrí el selector de sucursales (arriba, a la derecha del buscador)
+2. Elegí una sucursal → la tabla muestra solo los clientes de esa sucursal
+3. Las tarjetas de Total / Con teléfono / Sin teléfono / Judicial se recalculan sobre esa sucursal
+4. Volvé a "Todas las sucursales" para ver todo
 
-Con la sesión abierta, presioná **F12** → pestaña **Console** → escribí `allow pasting` (Enter) → pegá este comando y Enter:
+### Botón Nuevo Cliente eliminado:
+- En **Clientes** ya NO debe aparecer el botón verde **+ Nuevo Cliente**.
+- Solo quedan el buscador + el selector de sucursal + indicador "actualizando…".
 
-```js
-fetch('/api/admin/optimizar-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ejecutar:true})}).then(r=>r.json()).then(console.log)
-```
+## 🔧 Detalle técnico (por si te interesa)
 
-Si querés ver el diagnóstico antes (solo lectura):
+El nuevo flujo del endpoint `PUT /api/clientes/[id]/codeudor`:
+1. Guarda los campos `codeudorNombre`, `codeudorTelefono`, `codeudorCi`, `codeudorParentesco`
+   en el titular (compatibilidad hacia atrás con Notificaciones).
+2. Calcula `codigoCodeudor = "GAR-" + codigoEntidadTitular`.
+3. Busca si ya existe un `Cliente` con ese código:
+   - Si existe → actualiza nombre, teléfono, CI, sucursal, vendedor, cobrador.
+   - Si no existe → lo crea con esos datos y el mismo `empresaId` que el titular.
+4. Si algo falla en la creación de la entidad (no debería), no rompe el flujo:
+   el codeudor ya quedó guardado en los campos del titular.
 
-```js
-fetch('/api/admin/optimizar-db').then(r=>r.json()).then(console.log)
-```
-
-## PASO 4 (bonus pendiente) — Eliminar usuarios cobrador y vendedor
-
-Este endpoint **ya estaba desplegado** en el sistema; solo faltaba ejecutarlo.
-Con F12 → Console → `allow pasting` → pegá:
-
-```js
-fetch('/api/admin/limpiar-usuarios-demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmar:true})}).then(r=>r.json()).then(console.log)
-```
-
-Esto borra de la base de datos los usuarios **cobrador** y **vendedor** y devuelve la lista de usuarios restantes (debería quedar solo **admin**). La pantalla de login ya muestra únicamente el acceso rápido de Admin, así que no necesita cambios.
-
----
-
-## Notas técnicas
-
-- Los índices son seguros: no tocan datos, solo crean estructuras de búsqueda.
-- Si más adelante corré `prisma db push`, Prisma puede querer recrear estos índices con otros nombres — no pasa nada, son equivalentes.
-- El buscador y las tarjetas de estadísticas siguen funcionando sobre **todo** el listado (las 2.824 filas), solo la tabla dibuja 50 por página.
-- Al guardar/editar/importar clientes, el cache se invalida solo y refresca automáticamente.
+El `DELETE /api/clientes/[id]/codeudor` también elimina la entidad creada (si existe).
