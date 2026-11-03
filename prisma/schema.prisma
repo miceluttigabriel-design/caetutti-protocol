@@ -6,8 +6,10 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DATABASE_URL")
+  binaryTargets = ["native", "linux-x64-openssl-1.1.x"]
 }
 
 // ============================================================================
