@@ -1,80 +1,69 @@
-# FIX SCHEMA PRISMA — Caetutti Protocol
+# FIX IMPORT EXCEL — Caetutti Protocol
 
 ## Problema
-El login en Vercel falla con:
+La importación del Excel falla con 2801 errores:
 ```
-Prisma database validation error
-datasource `db` URL must start with `file:`
-schema.prisma line 10, provider = "sqlite"
+Cliente sin codigoEntidad o entidad
 ```
 
-**Causa:** `prisma/schema.prisma` tiene `provider = "sqlite"` pero la
-base de datos es Neon PostgreSQL. Prisma espera una URL `file:` y rechaza
-la URL `postgresql://` de Neon.
+## Causa raíz
+El front-end `src/components/modules/importar.tsx` lee el Excel con `XLSX.utils.sheet_to_json()`
+y envía las filas al backend envueltas como `{ clientes: [...filas...] }`.
 
-## Solución (automática)
+Pero las filas del Excel tienen **keys con espacios** ("Codigo Entidad", "Entidad", "Fecha Vcto"),
+mientras que el backend `/api/import` en modo JSON estructurado espera **keys camelCase**
+(`codigoEntidad`, `entidad`, `cuotas: [...]`).
 
-1. Copiá `fix-schema.js` a la **raíz** de tu repositorio local
-   `caetutti-protocol` (junto a `package.json`).
+Resultado: TODAS las filas fallan porque `c.codigoEntidad` es `undefined` para el backend.
 
-2. Abrí una terminal / PowerShell en esa carpeta y ejecutá:
+## Solución
+Se agregó una función `filasExcelAClientes(rows)` en el front-end que:
 
+1. Lee cada fila del Excel con sus keys originales ("Codigo Entidad", "Entidad", etc.)
+2. Agrupa las filas por `Codigo Entidad` en un Map
+3. Para cada cliente crea un objeto:
+   ```js
+   {
+     codigoEntidad: "52813",
+     entidad: "AGUILERA PEREIRA, ROLAN MOISES",
+     telefono: "0986101358",
+     // ...otros campos
+     cuotas: [{ fechaVcto, saldoGs, ... }, ...]
+   }
+   ```
+4. Cada fila del Excel se convierte en una cuota del cliente correspondiente
+5. Las filas vacías o de "TOTAL" se ignoran silenciosamente
+
+Esta estructura `{ clientes: [...] }` es exactamente lo que el backend espera en
+su camino `importStructured()` (línea 226-393 de src/app/api/import/route.ts),
+que tiene toda la lógica de:
+- Re-importación sin pisar montos editados
+- Marcar como cobradas las cuotas que no vinieron en el Excel nuevo
+- Recalcular interés e días automáticamente
+- Preservar `notificado`, `ultimaNotificacion`, `montoEditado`, `interesManual`
+
+## Beneficios adicionales
+- **Agrupa cuotas por cliente** → menos queries a la DB (1 findUnique + N inserts vs N×3 queries)
+- **Respeta la lógica de "no vino → cobrada"** que espera la estructura anidada
+- **Mantiene el chunking** (100 clientes por lote) para evitar timeout de Vercel
+- **Maneja JSON en ambos formatos**: estructura anidada o array plano de filas Excel
+
+## Archivo a reemplazar
 ```
-node fix-schema.js
+src/components/modules/importar.tsx
 ```
+(Un solo archivo — copiar sobre el existente en el repo local)
 
-3. El script va a:
-   - Cambiar `provider = "sqlite"` → `provider = "postgresql"` en `prisma/schema.prisma`
-   - Agregar `directUrl` y `binaryTargets` (necesario para Vercel)
-   - Agregar `"postinstall": "prisma generate"` a `package.json`
-
-4. Abrí **GitHub Desktop**, vas a ver 2 archivos modificados:
-   - `prisma/schema.prisma`
-   - `package.json`
-
-5. Commit message: `fix: schema provider postgresql + binaryTargets`
-
-6. **Commit to main** → **Push origin**
-
-7. Vercel redeploya automáticamente (2-3 minutos).
-
-8. Probá login: https://caetutti-protocol.vercel.app
-   Usuario: `admin`  Contraseña: `admin123`
-
----
-
-## Solución (manual) — si preferís editar a mano
-
-### Archivo 1: `prisma/schema.prisma`
-
-Buscar el bloque datasource (arriba de todo) y dejarlo así:
-
-```prisma
-datasource db {
-  provider   = "postgresql"
-  url        = env("DATABASE_URL")
-  directUrl  = env("DATABASE_URL")
-  binaryTargets = ["native", "linux-x64-openssl-1.1.x"]
-}
-```
-
-### Archivo 2: `package.json`
-
-En la sección `"scripts"`, asegurate de tener:
-
-```json
-"postinstall": "prisma generate",
-```
-
-Quedaría algo así:
-```json
-"scripts": {
-  "dev": "next dev",
-  "build": "next build",
-  "start": "next start",
-  "postinstall": "prisma generate",
-  "lint": "next lint"
-}
-```
-
-Después commit + push por GitHub Desktop.
+## Pasos
+1. Descargar y descomprimir este ZIP
+2. Copiar `src/components/modules/importar.tsx` sobre el del repo local:
+   ```
+   C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol\src\components\modules\importar.tsx
+   ```
+3. GitHub Desktop → verás 1 archivo modificado
+4. Commit message: `fix: import Excel agrupa filas en estructura clientes/cuotas`
+5. **Commit to main** → **Push origin**
+6. Esperar 2-3 min a que Vercel redeploye
+7. Probar importar el Excel de 1556 filas en https://caetutti-protocol.vercel.app
+8. El resultado debería mostrar ~700-800 clientes nuevos y ~1500 cuotas procesadas
+   (dependiendo de cuántas cuotas tenga cada cliente en tu Excel)

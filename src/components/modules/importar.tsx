@@ -9,7 +9,86 @@ import { Badge } from "@/components/ui/badge";
 import { Upload, FileSpreadsheet, Download, AlertCircle, CheckCircle2, Loader2, FileJson } from "lucide-react";
 import { toast } from "sonner";
 
-const CHUNK_SIZE = 200; // filas por lote — evita timeout de Vercel
+const CHUNK_SIZE = 100; // clientes por lote — evita timeout de Vercel
+
+// ============================================================
+// CONVERSIÓN EXCEL → ESTRUCTURA CLIENTES/CUOTAS
+// ============================================================
+// El backend /api/import en modo JSON estructurado espera:
+//   { clientes: [{ codigoEntidad, entidad, cuotas: [...] }] }
+// Pero las filas del Excel tienen keys con espacios ("Codigo Entidad").
+// Esta función agrupa las filas por Codigo Entidad y arma la estructura.
+// ============================================================
+function filasExcelAClientes(rows: any[]): any[] {
+  const mapa = new Map<string, any>();
+  let filasInvalidas = 0;
+
+  for (const row of rows) {
+    // Buscar la key en cualquier formato: "Codigo Entidad" o "codigoEntidad"
+    const codigoEntidad = String(
+      row["Codigo Entidad"] ??
+      row["codigoEntidad"] ??
+      row["Codigo_Entidad"] ??
+      ""
+    ).trim();
+
+    const entidad = String(
+      row["Entidad"] ??
+      row["entidad"] ??
+      ""
+    ).trim();
+
+    // Saltar filas vacías o de totales
+    if (!codigoEntidad || !entidad) {
+      filasInvalidas++;
+      continue;
+    }
+    if (/total|suma|subtotal/i.test(codigoEntidad) || /total|suma/i.test(entidad)) {
+      continue;
+    }
+
+    // Crear cliente si no existe en el mapa
+    if (!mapa.has(codigoEntidad)) {
+      mapa.set(codigoEntidad, {
+        codigoEntidad,
+        entidad,
+        ciEntidad: row["Ci Entidad"] ?? row["ciEntidad"] ?? null,
+        rucEntidad: row["Ruc Entidad"] ?? row["rucEntidad"] ?? null,
+        localidad: row["Localidad"] ?? row["localidad"] ?? null,
+        telefono: row["Telefono"] ?? row["telefono"] ?? null,
+        telefonoPivot: row["Telefono_pivot"] ?? row["Telefono pivot"] ?? null,
+        vendedor: row["Vendedor"] ?? row["vendedor"] ?? null,
+        cobrador: row["Cobrador"] ?? row["cobrador"] ?? null,
+        judicial: row["Judicial"] ?? "N",
+        informconf: row["Informconf"] ?? "N",
+        sucursal: row["Sucursal"] ?? row["sucursal"] ?? "Principal",
+        cuotas: [],
+      });
+    }
+
+    // Agregar la cuota (fila actual) al cliente
+    const cliente = mapa.get(codigoEntidad);
+    cliente.cuotas.push({
+      fechaVcto: row["Fecha Vcto"] ?? row["fechaVcto"] ?? null,
+      fechaEmision: row["Fecha Emision"] ?? row["fechaEmision"] ?? null,
+      saldoGs: row["Saldo en Gs"] ?? row["saldoGs"] ?? 0,
+      saldoGuarani: row["Saldo Guarani"] ?? row["saldoGuarani"] ?? null,
+      saldoDolar: row["Saldo Dolar"] ?? row["saldoDolar"] ?? null,
+      vencMes: row["Venc Mes"] ?? row["vencMes"] ?? null,
+      moneda: row["Moneda"] ?? row["moneda"] ?? "Gs",
+      diasAtrasado: row["Dias Atrasado"] ?? row["diasAtrasado"] ?? 0,
+      mesVcto: row["Mes Vcto"] ?? null,
+      anoVcto: row["Ano Vcto"] ?? null,
+      descripcion: `Importado el ${new Date().toISOString().slice(0, 10)}`,
+    });
+  }
+
+  if (filasInvalidas > 0) {
+    console.log(`[import] ${filasInvalidas} filas sin Codigo Entidad/Entidad (ignoradas)`);
+  }
+
+  return Array.from(mapa.values());
+}
 
 export function ImportarModule() {
   const qc = useQueryClient();
@@ -21,7 +100,7 @@ export function ImportarModule() {
   const inputRef = useRef<HTMLInputElement>(null);
 
   // === IMPORTACIÓN POR LOTES (chunks) ===
-  // Divide el archivo en lotes de 200 filas y los envía uno por uno.
+  // Divide el archivo en lotes de 100 clientes y los envía uno por uno.
   // Esto evita el timeout de Vercel con archivos grandes (1000+ filas).
   const importarArchivo = async () => {
     if (!file) {
@@ -34,41 +113,56 @@ export function ImportarModule() {
     setResultado(null);
 
     try {
-      // === 1. Leer el archivo y convertir a filas ===
-      let allRows: any[] = [];
+      // === 1. Leer el archivo y convertir a lista de clientes estructurados ===
+      let allClientes: any[] = [];
 
       if (file.name.toLowerCase().endsWith(".json")) {
-        // JSON
+        // JSON — puede ser estructura o array plano de filas Excel
         const text = await file.text();
         const parsed = JSON.parse(text);
+
         if (Array.isArray(parsed)) {
-          allRows = parsed;
+          // Array — chequear si es estructura clientes o filas planas
+          if (parsed.length > 0 && parsed[0].cuotas) {
+            // Ya es estructura {codigoEntidad, entidad, cuotas: [...]}
+            allClientes = parsed;
+          } else {
+            // Son filas planas → convertir
+            allClientes = filasExcelAClientes(parsed);
+          }
         } else if (parsed.clientes && Array.isArray(parsed.clientes)) {
-          allRows = parsed.clientes;
+          // Estructura {clientes: [...]}
+          if (parsed.clientes.length > 0 && parsed.clientes[0].cuotas) {
+            allClientes = parsed.clientes;
+          } else {
+            allClientes = filasExcelAClientes(parsed.clientes);
+          }
         } else {
           throw new Error("JSON inválido. Debe ser array o { clientes: [...] }");
         }
       } else {
-        // Excel
+        // Excel — leer filas y agrupar por cliente
         const buffer = await file.arrayBuffer();
         const workbook = XLSX.read(buffer, { type: "array" });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        allRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        const rawRows = XLSX.utils.sheet_to_json(sheet, { defval: "" });
+        allClientes = filasExcelAClientes(rawRows);
       }
 
-      if (allRows.length === 0) {
-        throw new Error("El archivo está vacío");
+      if (allClientes.length === 0) {
+        throw new Error("No se encontraron clientes válidos. Verificá que el Excel tenga las columnas 'Codigo Entidad' y 'Entidad'.");
       }
 
-      console.log(`[import] Total filas leídas: ${allRows.length}`);
+      console.log(`[import] Total clientes a importar: ${allClientes.length}`);
+      console.log(`[import] Total cuotas: ${allClientes.reduce((acc, c) => acc + (c.cuotas?.length || 0), 0)}`);
 
       // === 2. Dividir en lotes ===
       const lotes: any[][] = [];
-      for (let i = 0; i < allRows.length; i += CHUNK_SIZE) {
-        lotes.push(allRows.slice(i, i + CHUNK_SIZE));
+      for (let i = 0; i < allClientes.length; i += CHUNK_SIZE) {
+        lotes.push(allClientes.slice(i, i + CHUNK_SIZE));
       }
 
-      console.log(`[import] Total lotes: ${lotes.length} (${CHUNK_SIZE} filas por lote)`);
+      console.log(`[import] Total lotes: ${lotes.length} (${CHUNK_SIZE} clientes por lote)`);
       setProgress({ current: 0, total: lotes.length });
 
       // === 3. Enviar cada lote ===
@@ -128,7 +222,7 @@ export function ImportarModule() {
       // === 4. Mostrar resultado final ===
       setResultado(resultadoTotal);
       toast.success(
-        `Importación completada: ${resultadoTotal.cuotasProcesadas} cuotas en ${lotes.length} lote(s)`
+        `Importación completada: ${resultadoTotal.clientesNuevos + resultadoTotal.clientesActualizados} clientes, ${resultadoTotal.cuotasProcesadas} cuotas en ${lotes.length} lote(s)`
       );
       qc.invalidateQueries({ queryKey: ["clientes"] });
       qc.invalidateQueries({ queryKey: ["cuotas"] });
@@ -254,7 +348,7 @@ export function ImportarModule() {
           <CardContent className="space-y-3 text-sm">
             <div>
               <p className="font-semibold text-xs mb-1">📊 Excel (.xlsx)</p>
-              <p className="text-xs text-muted-foreground">Usa la plantilla descargable. Cada fila = 1 cuota. El sistema crea/actualiza clientes automáticamente.</p>
+              <p className="text-xs text-muted-foreground">Usa la plantilla descargable. Cada fila = 1 cuota. El sistema agrupa cuotas por cliente automáticamente.</p>
             </div>
             <div>
               <p className="font-semibold text-xs mb-1">📄 JSON</p>
