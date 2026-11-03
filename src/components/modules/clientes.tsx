@@ -14,20 +14,27 @@ import { Search, Plus, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Be
 import { fmtGs, fmtPhone, fmtRelative, fmtDateTime } from "@/lib/format";
 import { toast } from "sonner";
 
+const POR_PAGINA = 50;
+
 export function ClientesModule() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
+  const [pagina, setPagina] = useState(1);
   const [editing, setEditing] = useState<any | null>(null);
   const [viewing, setViewing] = useState<any | null>(null);
   const [showCreate, setShowCreate] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isFetching } = useQuery({
     queryKey: ["clientes"],
     queryFn: async () => {
       const r = await fetch("/api/clientes");
       if (!r.ok) throw new Error();
       return r.json();
     },
+    // ⚡ Cache de 5 minutos: cambiar de pestaña NO recarga todo de nuevo.
+    //    Si otro módulo guarda cambios, invalida el cache y se refresca solo.
+    staleTime: 5 * 60 * 1000,
+    refetchOnWindowFocus: false,
   });
 
   const clientes = (data?.clientes || []).filter((c: any) => {
@@ -39,6 +46,12 @@ export function ClientesModule() {
       || c.localidad?.toLowerCase().includes(q);
   });
 
+  // ⚡ Paginación del lado del cliente: la BD ya respondió todo,
+  //    solo dibujamos 50 filas por página para que el navegador vuele.
+  const totalPaginas = Math.max(1, Math.ceil(clientes.length / POR_PAGINA));
+  const paginaActual = Math.min(pagina, totalPaginas);
+  const visibles = clientes.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA);
+
   return (
     <div className="space-y-4">
       {/* Toolbar */}
@@ -48,13 +61,16 @@ export function ClientesModule() {
           <Input
             placeholder="Buscar por nombre, código, teléfono, localidad…"
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => { setSearch(e.target.value); setPagina(1); }}
             className="pl-9 glass-card"
           />
         </div>
         <Button onClick={() => setShowCreate(true)} className="glow-primary">
           <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
         </Button>
+        {isFetching && !isLoading && (
+          <span className="self-center text-xs text-muted-foreground animate-pulse">actualizando…</span>
+        )}
       </div>
 
       {/* Stats */}
@@ -89,7 +105,7 @@ export function ClientesModule() {
               {!isLoading && clientes.length === 0 && (
                 <tr><td colSpan={7} className="text-center py-10 text-muted-foreground text-sm">No hay clientes que coincidan con la búsqueda.</td></tr>
               )}
-              {!isLoading && clientes.map((c: any) => (
+              {!isLoading && visibles.map((c: any) => (
                 <tr key={c.id} className={`border-b border-border/20 hover:bg-secondary/30 transition-colors ${c.notificado ? "opacity-50" : ""}`}>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
@@ -151,6 +167,26 @@ export function ClientesModule() {
             </tbody>
           </table>
         </div>
+
+        {/* ⚡ Paginador */}
+        {!isLoading && clientes.length > 0 && (
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2 border-t border-border/40 bg-secondary/20">
+            <p className="text-xs text-muted-foreground">
+              Mostrando {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(paginaActual * POR_PAGINA, clientes.length)} de {clientes.length} clientes
+            </p>
+            <div className="flex items-center gap-1">
+              <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={paginaActual <= 1} onClick={() => setPagina(paginaActual - 1)}>
+                ‹ Anterior
+              </Button>
+              <span className="text-xs text-muted-foreground px-2">
+                Página {paginaActual} de {totalPaginas}
+              </span>
+              <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={paginaActual >= totalPaginas} onClick={() => setPagina(paginaActual + 1)}>
+                Siguiente ›
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Edit dialog */}

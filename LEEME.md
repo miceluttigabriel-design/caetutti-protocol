@@ -1,131 +1,71 @@
-# FIX USUARIOS DEMO — Caetutti Protocol
+# ⚡ FIX VELOCIDAD — Carga de Clientes (y bonus: eliminar usuarios demo)
 
-## 2 cambios
+## ¿Por qué estaba lento?
 
-### 1️⃣ Pantalla de login: solo botón Admin
-**Antes:** 3 botones demo (admin, cobrador, vendedor)
-**Ahora:** 1 solo botón (admin)
-- Título cambiado: "DEMO ACCOUNTS" → "ADMIN ACCESS"
-- Placeholder del campo usuario: "admin, cobrador, vendedor…" → "admin"
+El endpoint `/api/clientes` hacía **~8.500 consultas a la base de datos en cada carga**
+(3 consultas por cada cliente: saldo, última notificación, estado notificado × 2.824 clientes).
+Con Neon en EE.UU. eso tardaba 30–120 segundos o expiraba → la página quedaba en 0.
 
-### 2️⃣ Eliminar usuarios demo de la base de datos
-Elimina de la DB los usuarios:
-- **Juan Cobrador** (cobrador / cobrador123)
-- **Ana Vendedora** (vendedor / vendedor123)
+Además, cada vez que cambiabas de pestaña y volvías, TODO se recargaba de nuevo.
 
-Solo queda el usuario **admin**.
+## ¿Qué cambia este patch?
 
----
+| Archivo | Cambio |
+|---|---|
+| `src/app/api/clientes/route.ts` | **De ~8.500 consultas → 4 consultas totales** (groupBy + cruce en memoria). Misma respuesta, mismo formato. |
+| `src/components/modules/clientes.tsx` | **Paginación: 50 clientes por página** (con buscador, stats sobre el total) + **cache de 5 minutos** (cambiar de pestaña ya no recarga) + indicador "actualizando…". |
+| `src/lib/db.ts` | En producción ya no loguea cada query SQL (ahorraba CPU/memoria con miles de consultas). |
+| `src/app/api/admin/optimizar-db/route.ts` | **NUEVO** — crea índices en la BD para acelerar Clientes, Notificaciones y Dashboard. |
 
-## Archivos
-
-### 1. `src/components/auth/login-screen.tsx` (REEMPLAZAR)
-Login actualizado con solo el botón de admin.
-
-### 2. `src/app/api/admin/limpiar-usuarios-demo/route.ts` (NUEVO)
-Endpoint para eliminar los usuarios demo:
-- `GET` → lista los usuarios demo encontrados (sin eliminar)
-- `POST { confirmar: true }` → elimina cobrador y vendedor
-- Antes de eliminar el usuario, borra sus registros relacionados (notificaciones enviadas, contactos del día) para evitar errores de foreign key
+**Tiempo esperado de carga después del fix: 2–4 segundos** (antes 30s+ o timeout).
 
 ---
 
-## Pasos para aplicar
+## PASO 1 — Instalar el patch
 
-### 1️⃣ Descargá y descomprimí este ZIP
+1. Descomprimí `fix-velocidad-clientes.zip`
+2. Copiá las carpetas `src/` dentro de la raíz del repo
+   `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
+   (se reemplazan 3 archivos y se agrega 1 nuevo)
+3. En GitHub Desktop → commit (ej: "⚡ Optimizar velocidad Clientes") → **Push origin**
+4. Esperá 2–3 minutos al redeploy de Vercel
 
-### 2️⃣ Copiar los 2 archivos a tu repo local
+## PASO 2 — Probar
 
-**Archivo 1 (reemplazar existente):**
+Entrá a **Clientes** en https://caetutti-protocol.vercel.app.
+Debería cargar en pocos segundos y mostrar el paginador abajo:
+`Mostrando 1–50 de 2824 clientes · Página 1 de 57`
+
+## PASO 3 (una sola vez) — Crear índices en la BD
+
+Con la sesión abierta, presioná **F12** → pestaña **Console** → escribí `allow pasting` (Enter) → pegá este comando y Enter:
+
+```js
+fetch('/api/admin/optimizar-db',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({ejecutar:true})}).then(r=>r.json()).then(console.log)
 ```
-src/components/auth/login-screen.tsx
-→ ...caetutti-protocol\src\components\auth\login-screen.tsx
+
+Si querés ver el diagnóstico antes (solo lectura):
+
+```js
+fetch('/api/admin/optimizar-db').then(r=>r.json()).then(console.log)
 ```
 
-**Archivo 2 (crear carpeta nueva + archivo):**
+## PASO 4 (bonus pendiente) — Eliminar usuarios cobrador y vendedor
+
+Este endpoint **ya estaba desplegado** en el sistema; solo faltaba ejecutarlo.
+Con F12 → Console → `allow pasting` → pegá:
+
+```js
+fetch('/api/admin/limpiar-usuarios-demo',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({confirmar:true})}).then(r=>r.json()).then(console.log)
 ```
-src/app/api/admin/limpiar-usuarios-demo/route.ts
-→ ...caetutti-protocol\src\app\api\admin\limpiar-usuarios-demo\route.ts
-```
 
-### 3️⃣ GitHub Desktop — verás 2 archivos:
-- `src/components/auth/login-screen.tsx` (modificado)
-- `src/app/api/admin/limpiar-usuarios-demo/route.ts` (nuevo)
-
-### 4️⃣ Commit + Push:
-- Mensaje: `feat: login solo admin + endpoint eliminar usuarios demo`
-- **Commit to main** → **Push origin**
-
-### 5️⃣ Esperá 2-3 min a que Vercel redeploye
+Esto borra de la base de datos los usuarios **cobrador** y **vendedor** y devuelve la lista de usuarios restantes (debería quedar solo **admin**). La pantalla de login ya muestra únicamente el acceso rápido de Admin, así que no necesita cambios.
 
 ---
 
-## 🗑️ Eliminar los usuarios demo (después del deploy)
+## Notas técnicas
 
-1. Entrá a https://caetutti-protocol.vercel.app (logueate como admin/admin123)
-2. Abrí la consola del navegador (**F12** → pestaña **Console**). Si sale el warning amarillo, escribí `allow pasting` y dale Enter.
-3. Primero, previsualizá qué usuarios demo hay (opcional):
-
-```javascript
-fetch('/api/admin/limpiar-usuarios-demo')
-.then(r => r.json())
-.then(data => console.log('📋 Usuarios demo:', data))
-.catch(e => console.error('❌ Error:', e));
-```
-
-Vas a ver:
-```
-📋 Usuarios demo: {
-  usuariosDemoEncontrados: 2,
-  usuariosDemo: [
-    { login: "cobrador", nombre: "Juan Cobrador", rol: "cobrador", ... },
-    { login: "vendedor", nombre: "Ana Vendedora", rol: "vendedor", ... }
-  ],
-  usuariosTotales: [...]
-}
-```
-
-4. Ahora ejecutá la eliminación:
-
-```javascript
-fetch('/api/admin/limpiar-usuarios-demo', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ confirmar: true })
-})
-.then(r => r.json())
-.then(data => console.log('✅ Eliminados:', data))
-.catch(e => console.error('❌ Error:', e));
-```
-
-Vas a ver:
-```
-✅ Eliminados: {
-  mensaje: "Limpieza de usuarios demo completada",
-  eliminados: [
-    { login: "cobrador", nombre: "Juan Cobrador", eliminado: true },
-    { login: "vendedor", nombre: "Ana Vendedora", eliminado: true }
-  ],
-  usuariosRestantes: [
-    { login: "admin", nombre: "Administrador Demo", rol: "admin", activo: true }
-  ]
-}
-```
-
-5. Listo — solo queda el usuario admin en el sistema.
-
----
-
-## ✅ Verificación final
-
-1. **Login**: refrescá la página (F5) → el login solo muestra el botón "admin"
-2. **Usuarios**: andá al módulo de administración de usuarios → solo debe aparecer "Administrador Demo"
-3. **Login cobrador/vendedor**: si intentás loguearte con cobrador/vendedor → debe dar error de credenciales (ya no existen)
-
----
-
-## 🛡️ Seguridad
-
-- El endpoint requiere sesión de **admin** (cobradores/vendedores no pueden ejecutarlo)
-- Requiere `{ confirmar: true }` explícito para ejecutar la eliminación
-- Elimina primero los registros relacionados (notificaciones, contactos) para evitar errores de integridad
+- Los índices son seguros: no tocan datos, solo crean estructuras de búsqueda.
+- Si más adelante corré `prisma db push`, Prisma puede querer recrear estos índices con otros nombres — no pasa nada, son equivalentes.
+- El buscador y las tarjetas de estadísticas siguen funcionando sobre **todo** el listado (las 2.824 filas), solo la tabla dibuja 50 por página.
+- Al guardar/editar/importar clientes, el cache se invalida solo y refresca automáticamente.
