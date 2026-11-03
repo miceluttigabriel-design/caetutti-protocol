@@ -1,61 +1,114 @@
-# FIX SUCURSAL DATA — Caetutti Protocol
+# FIX SYNC SUCURSAL — Caetutti Protocol
 
-## 🎯 El problema
+## 🎯 El problema (CAUSA RAÍZ confirmada)
 
-El dashboard por sucursal no muestra números separados aunque el código del dashboard ya filtra correctamente. La causa probable: las cuotas y/o clientes tienen `sucursalId = null` en la base de datos (no se asignó correctamente durante el import).
+El dashboard muestra:
+- ✅ Clientes Activos: 698 (el filtro SÍ funciona para clientes)
+- ❌ Total Pendiente: ₲0 (las cuotas NO se filtran bien)
+- ❌ Todos los demás KPIs: 0
 
-## 🔍 Cómo diagnosticar
+**Causa raíz:** Los clientes SÍ tienen `sucursalId` asignado, pero las cuotas NO tienen el mismo `sucursalId` que su cliente. Por eso cuando seleccionás KATUETE:
+- `db.cliente.count({ where: { sucursalId: KATUETE_ID } })` → 698 ✓
+- `db.cuota.findMany({ where: { sucursalId: KATUETE_ID, estado: "pendiente" } })` → 0 ❌
 
-Después de aplicar este patch y deployear, ejecutá en la consola del navegador (F12, logueado como admin):
+## ✅ La solución
+
+Endpoint `/api/admin/sync-sucursales` que:
+1. **Diagnóstico** (GET o POST sin `ejecutar`): muestra cuántas cuotas están desalineadas
+2. **Sincronización** (POST con `ejecutar: true`):
+   - Para cada cuota, copia el `sucursalId` de su cliente
+   - Para cada cliente sin `sucursalId`, toma el de sus cuotas
+   - Los que siguen sin sucursal → los asigna a "Principal"
+
+## Archivo a agregar
+
+```
+src/app/api/admin/sync-sucursales/route.ts  (NUEVO)
+```
+
+## Pasos
+
+### 1. Descargar y descomprimir este ZIP
+
+### 2. Copiar el archivo al repo local
+```
+src/app/api/admin/sync-sucursales/route.ts
+→ ...caetutti-protocol\src\app\api\admin\sync-sucursales\route.ts
+```
+(Crear la carpeta `sync-sucursales/`)
+
+### 3. GitHub Desktop → 1 archivo nuevo
+- Mensaje: `fix: sincronizar sucursalId de cuotas con el de su cliente`
+- Commit to main → Push origin
+
+### 4. Esperar 2-3 min a que Vercel redeploye
+
+---
+
+## 🔍 PASO 1 — Diagnóstico (después del deploy)
+
+En la consola del navegador (F12, logueado como admin), pegá:
 
 ```javascript
-fetch('/api/admin/diagnosticar-sucursales')
+fetch('/api/admin/sync-sucursales')
 .then(r => r.json())
 .then(data => console.log('🔍 DIAGNÓSTICO:', data))
 .catch(e => console.error('❌ Error:', e));
 ```
 
-Vas a ver:
-- Lista de sucursales con ID, nombre y conteo de clientes/cuotas
-- Cuántos clientes y cuotas tienen `sucursalId = null`
-- Cuántos se pueden reparar tomando el sucursalId del cliente
-- Lista de problemas detectados
+Vas a ver algo como:
+```
+🔍 DIAGNÓSTICO: {
+  diagnosticoCuotas: {
+    totalCuotas: 2797,
+    cuotasConSucursalId: 500,
+    cuotasSinSucursalId: 2297,  // ← PROBLEMA
+    cuotasConSucursalIgualCliente: 200,
+    cuotasConSucursalDiferenteCliente: 300,  // ← PROBLEMA
+    cuotasSinClienteSucursal: 2297
+  },
+  reporteSucursales: [
+    { nombre: "KATUETE", clientes: 698, cuotas: 0, cuotasPendientes: 0 },  // ← ASIMETRÍA
+    { nombre: "NUEVA ESPERANZA", clientes: 200, cuotas: 0, cuotasPendientes: 0 }
+  ]
+}
+```
 
-## 🔧 Cómo reparar
+## 🔧 PASO 2 — Sincronización
 
-Si el diagnóstico muestra `❌ X cuotas sin sucursalId asignado`, ejecutá:
+Si el diagnóstico muestra cuotas desalineadas, ejecutá:
 
 ```javascript
-fetch('/api/admin/diagnosticar-sucursales', {
+fetch('/api/admin/sync-sucursales', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ arreglar: true })
+  body: JSON.stringify({ ejecutar: true })
 })
 .then(r => r.json())
-.then(data => console.log('🔧 REPARACIÓN:', data))
+.then(data => console.log('✅ SINCRONIZADO:', data))
 .catch(e => console.error('❌ Error:', e));
 ```
 
-Esto repará en 3 fases:
-1. **Fase 1**: Cuotas con `sucursalId=null` cuyo cliente SÍ tiene sucursal → copia el sucursalId del cliente
-2. **Fase 2**: Clientes con `sucursalId=null` cuyas cuotas SÍ tienen sucursal → copia de la primera cuota
-3. **Fase 3**: Los que siguen sin sucursal → los asigna a "Principal"
-
-Después refrescá la página (F5) y el dashboard por sucursal va a funcionar.
-
-## Archivo a agregar
-
+Vas a ver:
 ```
-src/app/api/admin/diagnosticar-sucursales/route.ts  (NUEVO)
+✅ SINCRONIZADO: {
+  mensaje: "Sincronización completada — el dashboard por sucursal debería funcionar ahora",
+  acciones: [
+    "✅ 2597 cuotas sincronizadas con el sucursalId de su cliente",
+    "✅ 0 clientes sincronizados con el sucursalId de sus cuotas",
+    "✅ 200 cuotas sin sucursal asignadas a 'Principal'"
+  ],
+  reporteSucursales: [
+    { nombre: "KATUETE", clientes: 698, cuotas: 850, cuotasPendientes: 720 },
+    { nombre: "NUEVA ESPERANZA", clientes: 200, cuotas: 250, cuotasPendientes: 200 }
+  ]
+}
 ```
 
-## Pasos
+## ✅ PASO 3 — Verificar
 
-1. Descargar y descomprimir este ZIP
-2. Copiar `src/app/api/admin/diagnosticar-sucursales/route.ts` al repo local
-3. GitHub Desktop → 1 archivo nuevo
-4. Commit: `feat: endpoint diagnosticar y reparar sucursalId en cuotas/clientes`
-5. Push origin → esperá 2-3 min a que Vercel redeploye
-6. Ejecutá el GET para diagnosticar
-7. Ejecutá el POST con `{arreglar: true}` para reparar
-8. Refrescá la página → el dashboard por sucursal va a funcionar
+Refrescá la página (F5), andá al dashboard, seleccioná KATUETE:
+- ✅ Total Pendiente ya NO es ₲0 — muestra el total de KATUETE
+- ✅ Tasa de Cobranza calculada sobre las ventas de KATUETE
+- ✅ % Recuperado del Mes calculado sobre las cuotas de KATUETE
+- ✅ Gráficos muestran datos
