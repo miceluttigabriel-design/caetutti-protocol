@@ -129,7 +129,15 @@ export async function generarMensajeAgrupado(
   // 3. Pie dinámico o estático
   let pie = "";
   if (template.usarReglasDinamicas) {
-    pie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente") || template.pieEstatico || "";
+    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente") || template.pieEstatico || "";
+    // Aplicar sustitución de variables al pie (cliente + cuota con mayor atraso)
+    const cuotaMayorAtraso = cuotas.reduce((max, q) =>
+      ((q.diasAtrasado ?? 0) > (max.diasAtrasado ?? 0)) ? q : max, cuotas[0] || {});
+    const varsPie = {
+      ...varsCliente(cliente, totalGs, cuotas.length),
+      ...varsCuota(cuotaMayorAtraso),
+    };
+    pie = sustituirVariables(pieMsg, varsPie);
   } else {
     pie = template.pieEstatico || "";
   }
@@ -184,7 +192,15 @@ export async function generarMensajeCodeudor(
   // Pie
   let pie = "";
   if (template.usarReglasDinamicas) {
-    pie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor") || template.pieEstatico || "";
+    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor") || template.pieEstatico || "";
+    // Aplicar sustitución de variables al pie (codeudor + cuota con mayor atraso)
+    const cuotaMayorAtraso = cuotas.reduce((max, q) =>
+      ((q.diasAtrasado ?? 0) > (max.diasAtrasado ?? 0)) ? q : max, cuotas[0] || {});
+    const varsPie = {
+      ...varsCliente(codeudor, totalGs, cuotas.length),
+      ...varsCuota(cuotaMayorAtraso),
+    };
+    pie = sustituirVariables(pieMsg, varsPie);
   } else {
     pie = template.pieEstatico || "";
   }
