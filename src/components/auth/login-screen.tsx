@@ -175,7 +175,7 @@ export function LoginScreen() {
                 type="text"
                 value={login}
                 onChange={(e) => setLogin(e.target.value)}
-                placeholder="admin, cobrador, vendedor…"
+                placeholder="admin"
                 disabled={loading}
                 autoComplete="username"
                 className="font-mono bg-black/40 border-primary/20 text-primary placeholder:text-primary/30"
@@ -212,12 +212,12 @@ export function LoginScreen() {
             </Button>
           </form>
 
-          {/* Demo accounts */}
+          {/* Acceso rápido Admin */}
           <div className="mt-6 pt-6 border-t border-primary/10">
             <p className="text-[10px] font-mono text-primary/50 mb-2 text-center">
-              {">"} DEMO ACCOUNTS — click to autofill:
+              {">"} ADMIN ACCESS — click to autofill:
             </p>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 gap-2">
               <Button
                 type="button"
                 variant="outline"
@@ -226,24 +226,6 @@ export function LoginScreen() {
                 className="text-xs font-mono border-primary/30 text-primary hover:bg-primary/10"
               >
                 <span className="text-primary/60 mr-1">$</span> admin
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => quickFill("cobrador", "cobrador123")}
-                className="text-xs font-mono border-primary/30 text-primary hover:bg-primary/10"
-              >
-                <span className="text-primary/60 mr-1">$</span> cobrador
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => quickFill("vendedor", "vendedor123")}
-                className="text-xs font-mono border-primary/30 text-primary hover:bg-primary/10"
-              >
-                <span className="text-primary/60 mr-1">$</span> vendedor
               </Button>
             </div>
           </div>
