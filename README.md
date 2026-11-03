@@ -3,9 +3,10 @@
 Sistema de cobranzas con WhatsApp, IA y automatización.
 
 ## ✅ YA CONFIGURADO PARA:
-- Base de datos: Neon (PostgreSQL) ✅
-- Deploy: Vercel ✅
-- Repo: GitHub ✅
+
+* Base de datos: Neon (PostgreSQL) ✅
+* Deploy: Vercel ✅
+* Repo: GitHub ✅
 
 ## 🎯 INSTRUCCIONES RÁPIDAS
 
@@ -18,8 +19,9 @@ npm run dev
 ```
 
 Abrir: http://localhost:3000
-- Usuario: admin
-- Contraseña: admin123
+
+* Usuario: admin
+* Contraseña: admin123
 
 ## 📤 SUBIR A GITHUB
 
@@ -37,7 +39,11 @@ git push -u origin main
 1. https://vercel.com/ → Log In con GitHub
 2. Add New Project → caetutti-protocol
 3. Environment Variables:
-   - DATABASE_URL = (tu URL de Neon)
-   - NEXTAUTH_URL = https://caetutti-protocol.vercel.app
-   - NEXTAUTH_SECRET = caetutti-micelutti-2026-clave-super-secreta-cambiar-xyz
+
+   * DATABASE\_URL = (tu URL de Neon)
+   * NEXTAUTH\_URL = https://caetutti-protocol.vercel.app
+   * NEXTAUTH\_SECRET = caetutti-micelutti-2026-clave-super-secreta-cambiar-xyz
 4. Deploy
+
+Deploy inicial
+
