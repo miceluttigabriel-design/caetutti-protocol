@@ -1,47 +1,83 @@
-# FIX CODEUDORES V2 — Caetutti Protocol
+# FIX NOTIFICACIONES V3 — Caetutti Protocol
 
-## 3 cambios solicitados
+## 4 problemas resueltos en un solo patch
 
-1. **Eliminar la opción "Agregar Garante"** en la pestaña Titulares
-2. **Crear codeudor desde la pestaña Codeudores** con búsqueda de titular para vincular
-3. **Borrar las sucursales** "CENTRAL ASUNCION", "SUCURSAL CAPIATA", "SUCURSAL SAN LORENZO"
+### 1. ✅ Mostrar TODOS los clientes en Notificaciones
+**Antes:** El endpoint filtraba `telefono: { not: null }` → solo mostraba clientes con teléfono.
+**Ahora:** Muestra TODOS los clientes con cuotas pendientes, tengan o no teléfono.
+
+### 2. ✅ Eliminar sucursales ficticias automáticamente
+**Antes:** Había que ejecutar el endpoint manualmente con un script.
+**Ahora:** El endpoint `/api/admin/auto-setup` hace cleanup + recálculo en un solo request.
+
+### 3. ✅ Ordenar por Fecha Vcto (del menos vencido al más vencido)
+**Antes:** Ordenaba por `maxDiasAtraso` pero el valor guardado podía estar desactualizado.
+**Ahora:**
+- Recalcula `diasAtrasado` al vuelo en cada request (basado en `fechaVcto` vs hoy)
+- Ordena por `diasAtrasado` ascendente (menos vencido primero)
+- Los "Por vencer" (0 días) van primero
+- Los poco vencidos (1-30 días) después
+- Los muy vencidos (60+ días) al final
+
+### 4. ✅ Recálculo automático diario de los días de atraso
+**Antes:** `diasAtrasado` se guardaba al importar y no se actualizaba.
+**Ahora:**
+- El endpoint `/api/notificaciones` recalcula al vuelo (sin esperar a la DB)
+- Actualiza la DB en background (hasta 500 cuotas por request)
+- El endpoint `/api/admin/recalcular-dias` hace recálculo masivo completo
+- El endpoint `/api/admin/auto-setup` hace cleanup + recálculo en uno solo
+
+---
+
+## Mejoras visuales en las tarjetas
+
+### Tarjeta de Titular (pestaña "Titulares")
+Ahora muestra:
+- `#código` · **Nombre del cliente** · ⚠ Judicial (si aplica) · ✓ Notificado (si aplica)
+- 📞 Teléfono (o "Sin teléfono") · **Vencido hace Xd** / **Por vencer** · **Vcto: DD/MM/AAAA** · Sucursal · últ. notif.
+- 💰 Total a cobrar · +interés
+- Botones: Ver · Editar · Cliente (WhatsApp)
+
+### Tarjeta de Codeudor (pestaña "Codeudores")
+Ahora muestra:
+- 👤 Avatar violeta + **Nombre del codeudor** · Badge "Codeudor" · Parentesco
+- 📞 Teléfono (o "Sin teléfono")
+- **Titular:** `#código` · Nombre · **Vencido hace Xd** / **Por vencer** · **Vcto: DD/MM/AAAA**
+- 💰 Total a cobrar · +interés
+- Botones: Ver · Notificar · Editar
 
 ---
 
 ## Archivos a reemplazar / agregar
 
-### 1. `src/components/modules/notificaciones.tsx` (REEMPLAZAR)
+### 1. `src/app/api/notificaciones/route.ts` (REEMPLAZAR)
+- Quita el filtro `telefono: { not: null }`
+- Recalcula `diasAtrasado` al vuelo basado en `fechaVcto` vs hoy
+- Actualiza la DB en background (hasta 500 cuotas por request)
+- Ordena por `diasAtrasado` ascendente (menos vencido primero)
+- Expone `montoEditado` e `interesManual` en cada cuota (para el modal de edición)
 
-Cambios realizados:
+### 2. `src/app/api/admin/recalcular-dias/route.ts` (NUEVO)
+Endpoint POST para recálculo masivo:
+- Recorre TODAS las cuotas pendientes
+- Recalcula `diasAtrasado`, `interesGs` (si no es manual) y `saldoTotalGs`
+- Procesa en lotes de 50 para no sobrecargar la DB
+- Requiere permiso de admin
 
-#### Eliminar Garantes de Titulares
-- ❌ Eliminada la fila `<GarantesSection cliente={cliente} />` de NotifCard
-- ❌ Eliminada la función `GarantesSection` (código muerto)
-- ❌ Eliminada la función `GaranteEditInline` (código muerto)
-- ✅ La pestaña "Titulares" ahora muestra SOLO: nombre del cliente, teléfono, deuda, botones Ver/Editar/Cliente
-- ✅ Sin "Sin garantes adicionales", sin "Agregar Garante"
+### 3. `src/app/api/admin/auto-setup/route.ts` (NUEVO)
+Endpoint POST que ejecuta en un solo request:
+- **FASE 1**: Borra las 3 sucursales ficticias
+  - "CENTRAL ASUNCION"
+  - "SUCURSAL CAPIATA"
+  - "SUCURSAL SAN LORENZO"
+  - Reasigna clientes/cuotas a "Principal" (la crea si no existe)
+- **FASE 2**: Recalcula días e interés de todas las cuotas pendientes
+- Requiere permiso de admin
 
-#### Crear Codeudor desde pestaña "Codeudores"
-- ✅ Agregado botón "Registrar Codeudor" arriba de la lista de codeudores
-- ✅ Cuando no hay codeudores, se muestra un placeholder con el botón
-- ✅ Nuevo componente `NuevoCodeudorDialog` con flujo de 2 pasos:
-  - **Paso 1**: Buscar titular (por nombre, código, CI o teléfono) → seleccionar
-  - **Paso 2**: Llenar datos del codeudor (nombre *, teléfono, CI, parentesco) → guardar
-- ✅ Usa el endpoint existente `PUT /api/clientes/{titularId}/codeudor`
-- ✅ Botón "← Cambiar titular" para volver al paso 1 si te equivocaste
-- ✅ Botón "← Atrás" en paso 2 para cambiar de titular
-
-### 2. `src/app/api/admin/cleanup-sucursales/route.ts` (NUEVO)
-
-Endpoint POST para borrar sucursales no deseadas:
-- Recibe: `{ sucursales: ["CENTRAL ASUNCION", "SUCURSAL CAPIATA", ...] }`
-- Para cada sucursal:
-  1. Busca la sucursal (case-insensitive)
-  2. Reasigna todos sus clientes y cuotas a la sucursal "Principal" (la crea si no existe)
-  3. Reasigna ventasMes y objetivos dinámicos
-  4. Borra la sucursal
-- Requiere sesión de admin (rol: "admin")
-- Retorna: lista de resultados con cuántos clientes/cuotas movió cada una
+### 4. `src/components/modules/notificaciones.tsx` (REEMPLAZAR)
+- Muestra `Vcto: DD/MM/AAAA` (fecha de vencimiento más próxima) en cada tarjeta
+- Estado más claro: "Por vencer" / "Vencido hace Xd" (en vez de "Xd atraso")
+- Mantiene TODO lo anterior: pestañas, codeudores aparte, editar montos, etc.
 
 ---
 
@@ -49,119 +85,126 @@ Endpoint POST para borrar sucursales no deseadas:
 
 ### 1️⃣ Descargá y descomprimí este ZIP
 
-### 2️⃣ Copiar los archivos a tu repo local
+### 2️⃣ Copiar los 4 archivos a tu repo local
 
 **Archivo 1 (reemplazar existente):**
 ```
+src/app/api/notificaciones/route.ts
+→ ...caetutti-protocol\src\app\api\notificaciones\route.ts
+```
+
+**Archivo 2 (reemplazar existente):**
+```
 src/components/modules/notificaciones.tsx
-→ C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol\src\components\modules\notificaciones.tsx
+→ ...caetutti-protocol\src\components\modules\notificaciones.tsx
 ```
 
-**Archivo 2 (crear carpeta nueva + archivo):**
+**Archivo 3 (crear carpetas nuevas + archivo):**
 ```
-src/app/api/admin/cleanup-sucursales/route.ts
-→ C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol\src\app\api\admin\cleanup-sucursales\route.ts
+src/app/api/admin/recalcular-dias/route.ts
+→ ...caetutti-protocol\src\app\api\admin\recalcular-dias\route.ts
 ```
-(Las carpetas `admin/` y `cleanup-sucursales/` no existen todavía — crealas)
 
-### 3️⃣ GitHub Desktop — verás 2 archivos:
+**Archivo 4 (crear carpeta nueva + archivo):**
+```
+src/app/api/admin/auto-setup/route.ts
+→ ...caetutti-protocol\src\app\api\admin\auto-setup\route.ts
+```
+
+> Si ya habías aplicado el patch `fix-codeudores-v2.zip` con el archivo `cleanup-sucursales`, podés dejarlo o borrarlo — `auto-setup` es más completo y lo reemplaza.
+
+### 3️⃣ GitHub Desktop — verás 4 archivos:
+- `src/app/api/notificaciones/route.ts` (modificado)
 - `src/components/modules/notificaciones.tsx` (modificado)
-- `src/app/api/admin/cleanup-sucursales/route.ts` (nuevo)
+- `src/app/api/admin/recalcular-dias/route.ts` (nuevo)
+- `src/app/api/admin/auto-setup/route.ts` (nuevo)
 
 ### 4️⃣ Commit + Push:
-- Mensaje: `feat: elimina garantes titular + crear codeudor + cleanup sucursales`
+- Mensaje: `feat: todos los clientes + orden por vencimiento + recálculo diario + cleanup sucursales`
 - **Commit to main** → **Push origin**
 
 ### 5️⃣ Esperá 2-3 min a que Vercel redeploye
 
 ---
 
-## Cómo borrar las 3 sucursales
+## 🧹 Cómo ejecutar el cleanup + recálculo (después del deploy)
 
-Después del deploy, abrí el navegador y entrá a (logueado como admin):
-
-### Opción A — Por URL directa
-
-Visitá esta URL en el navegador (reemplazando por tu URL real):
-
-```
-https://caetutti-protocol.vercel.app/api/admin/cleanup-sucursales
-```
-
-Pero como es un POST, no podés abrirlo directamente. Mejor usar la consola del navegador:
-
-### Opción B — Por consola del navegador (recomendada)
+Esto borra las 3 sucursales ficticias Y recalcula los días de todas las cuotas en un solo paso.
 
 1. Entrá a https://caetutti-protocol.vercel.app (logueate como admin/admin123)
-2. Abrí la consola del navegador (F12 → pestaña "Console")
-3. Pegá este código y dale Enter:
+2. Abrí la consola del navegador (**F12** → pestaña **Console**)
+3. Pegá este código y dale **Enter**:
 
 ```javascript
-fetch('/api/admin/cleanup-sucursales', {
+fetch('/api/admin/auto-setup', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({
-    sucursales: ['CENTRAL ASUNCION', 'SUCURSAL CAPIATA', 'SUCURSAL SAN LORENZO']
-  })
+  body: JSON.stringify({})  // usa defaults: 3 sucursales ficticias + recálculo completo
 })
 .then(r => r.json())
-.then(data => console.log('✅ Resultado:', data))
+.then(data => console.log('✅ Auto-setup completado:', data))
 .catch(e => console.error('❌ Error:', e));
 ```
 
 4. Vas a ver en la consola algo como:
 ```
-✅ Resultado: {
-  mensaje: "Limpieza de sucursales completada",
-  sucursalDestino: "Principal",
-  resultados: [
-    { nombre: "CENTRAL ASUNCION", encontrada: true, clientesMovidos: 234, cuotasMovidas: 410, borrada: true },
-    { nombre: "SUCURSAL CAPIATA", encontrada: true, clientesMovidos: 187, cuotasMovidas: 322, borrada: true },
-    { nombre: "SUCURSAL SAN LORENZO", encontrada: true, clientesMovidos: 156, cuotasMovidas: 287, borrada: true }
-  ]
+✅ Auto-setup completado: {
+  mensaje: "Auto-setup completado: sucursales limpias + días recalculados",
+  fase1_sucursales: {
+    sucursalDestino: "Principal",
+    resultados: [
+      { nombre: "CENTRAL ASUNCION", encontrada: true, clientesMovidos: 234, cuotasMovidas: 410, borrada: true },
+      { nombre: "SUCURSAL CAPIATA", encontrada: true, clientesMovidos: 187, cuotasMovidas: 322, borrada: true },
+      { nombre: "SUCURSAL SAN LORENZO", encontrada: true, clientesMovidos: 156, cuotasMovidas: 287, borrada: true }
+    ]
+  },
+  fase2_recalculo: {
+    totalCuotas: 1500,
+    actualizadas: 1450,
+    sinCambios: 50,
+    errores: 0,
+    fechaCalculo: "2026-11-03T00:00:00.000Z"
+  }
 }
 ```
 
-5. Refrescá la página y verificá que las sucursales ya no aparecen en el dropdown de sucursales del dashboard.
-
-### ¿Qué pasa con los clientes/cuotas de esas sucursales?
-
-No se pierden. Se mueven a la sucursal "Principal". Después podés:
-- Dejarlos ahí en "Principal"
-- O crear las sucursales reales que sí usan y mover los clientes manualmente
+5. Refrescá la página (F5) → vas a ver:
+   - ✅ Todas las sucursales ficticias desaparecieron del dropdown
+   - ✅ Todos los clientes aparecen en Notificaciones (con o sin teléfono)
+   - ✅ Ordenados del menos vencido al más vencido
+   - ✅ Los días de atraso están actualizados a hoy
+   - ✅ Cada tarjeta muestra "Vcto: DD/MM/AAAA"
 
 ---
 
-## Cómo usar la nueva UI de Notificaciones
+## 🔁 Recálculo diario (sin borrar sucursales)
 
-### Pestaña "Titulares" (verde)
-- Lista limpia de clientes
-- Solo: nombre, código, teléfono, deuda, días atraso
-- Botones: Ver / Editar / Cliente (WhatsApp)
-- **SIN "Agregar Garante"** (eliminado)
-- **SIN fila de codeudor debajo** (eliminado en patch anterior)
+Si en el futuro solo querés recalcular los días (sin tocar sucursales), usá:
 
-### Pestaña "Codeudores" (violeta)
-- Arriba: tarjeta "Gestión de Codeudores" con botón **"Registrar Codeudor"**
-- Lista de codeudores existentes (cada uno con su titular asociado)
-- Botones por codeudor: Ver / Notificar / Editar
+```javascript
+fetch('/api/admin/recalcular-dias', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({})
+})
+.then(r => r.json())
+.then(data => console.log('✅ Recálculo:', data))
+.catch(e => console.error('❌ Error:', e));
+```
 
-### Crear codeudor nuevo
-1. Pestaña "Codeudores" → botón **"Registrar Codeudor"**
-2. **Paso 1**: buscá al titular por nombre, código, CI o teléfono → clic en el resultado
-3. **Paso 2**: llená los datos del codeudor (nombre es obligatorio) → **"💾 Registrar Codeudor"**
-4. El codeudor queda vinculado al titular y aparece en la lista
+> Importante: El endpoint `/api/notificaciones` ya recalcula al vuelo en cada request, así que esto solo es necesario si querés forzar la actualización de la DB (por ejemplo, para que los reportes y el dashboard usen valores frescos).
 
 ---
 
 ## Lo que NO se tocó (preservado)
 
-- ✅ CodeudorDialog (editar/eliminar codeudor existente) — funciona igual
-- ✅ NotifDetalle (ver detalle con preview de mensaje) — funciona igual
+- ✅ Pestañas "Titulares" / "Codeudores" — funcionan igual
+- ✅ CodeudorDialog (editar/eliminar codeudor) — funciona igual
+- ✅ NuevoCodeudorDialog (registrar codeudor buscando titular) — funciona igual
+- ✅ NotifDetalle (ver detalle con preview) — funciona igual
 - ✅ EditMontoDialog (editar saldos e intereses) — funciona igual
-- ✅ CodeudorCard (tarjeta de codeudor en pestaña) — funciona igual
 - ✅ Stats (Total, Sin teléfono, Con codeudor, Total a cobrar) — sin cambios
 - ✅ Buscador — funciona en ambas pestañas
 - ✅ Switch "Ocultar notificados" — sin cambios
-- ✅ Flag `esCodeudorGarante: true` al notificar — sin cambios (no marca cuotas del titular como notificadas)
-- ✅ Base de datos — no se toca nada, solo se borran las 3 sucursales al llamar al endpoint
+- ✅ Flag `esCodeudorGarante: true` al notificar codeudor — sin cambios
+- ✅ Base de datos — no se modifica el schema, solo se actualizan valores

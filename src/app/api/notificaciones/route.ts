@@ -2,29 +2,33 @@ import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, ok, fail, unauthorized, sucursalFilter } from "@/lib/session";
 
+export const dynamic = "force-dynamic";
+
 // GET /api/notificaciones
-// ?agrupada=true → lista clientes con cuotas pendientes listas para notificar
+// ?agrupada=true → lista TODOS los clientes con cuotas pendientes listas para notificar
 // Sin param → lista historial de notificaciones enviadas
+//
+// CAMBIOS v3:
+//   - Muestra TODOS los clientes (con o sin teléfono)
+//   - Recalcula diasAtrasado al vuelo (basado en fechaVcto vs hoy)
+//   - Ordena por diasAtrasado ascendente (menos vencido → más vencido)
+//   - Actualiza la DB en background con los días recalculados (no bloquea)
 export async function GET(req: NextRequest) {
   const user = await getSession();
   if (!user) return unauthorized();
-
   const { searchParams } = new URL(req.url);
   const sucursalId = searchParams.get("sucursal");
   const ocultarNotificados = searchParams.get("ocultar_notificados") === "true";
-
   const sucursalWhere =
     sucursalId && sucursalId !== "__TODAS__"
       ? { sucursalId }
       : sucursalFilter(user);
 
-  // Lista única de clientes con cuotas pendientes
-  // Cada cliente trae su codeudor registrado (si lo tiene)
+  // Lista única de clientes con cuotas pendientes — sin filtro de teléfono
   const clientes = await db.cliente.findMany({
     where: {
       empresaId: user.empresaId,
       ...sucursalWhere,
-      telefono: { not: null },
       cuotas: {
         some: { estado: "pendiente" },
       },
@@ -50,14 +54,50 @@ export async function GET(req: NextRequest) {
     orderBy: { entidad: "asc" },
   });
 
+  // === Recálculo al vuelo de diasAtrasado ===
+  // Para cada cuota, calcular los días reales basados en fechaVcto vs hoy.
+  // Esto asegura que el conteo sea correcto sin importar cuándo se importó.
+  const hoy = new Date();
+  hoy.setHours(0, 0, 0, 0);
+
+  // Track de cuotas que necesitan actualización en DB (en background)
+  const cuotasAActualizar: Array<{ id: string; diasAtrasado: number }> = [];
+
   const resultado = clientes
     .map((c) => {
-      const totalGs = c.cuotas.reduce((s, q) => s + (q.saldoTotalGs || q.saldoGs), 0);
-      const totalSaldoSinInteres = c.cuotas.reduce((s, q) => s + q.saldoGs, 0);
-      const totalInteres = totalGs - totalSaldoSinInteres;
-      const maxDiasAtraso = Math.max(0, ...c.cuotas.map((q) => q.diasAtrasado));
-      const todasNotificadas = c.cuotas.every((q) => q.notificado);
+      // Mapear cuotas con diasAtrasado recalculado al vuelo
+      const cuotasMapeadas = c.cuotas.map((q) => {
+        const vcto = new Date(q.fechaVcto);
+        vcto.setHours(0, 0, 0, 0);
+        const diffMs = hoy.getTime() - vcto.getTime();
+        const diasCalculados = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
+        // Si el valor en DB es diferente, marcar para actualizar
+        if (q.diasAtrasado !== diasCalculados) {
+          cuotasAActualizar.push({ id: q.id, diasAtrasado: diasCalculados });
+        }
+
+        return {
+          id: q.id,
+          fechaVcto: q.fechaVcto,
+          saldoGs: q.saldoGs,
+          saldoTotalGs: q.saldoTotalGs || q.saldoGs,
+          interesGs: q.interesGs || 0,
+          diasAtraso: diasCalculados, // ← valor recalculado al vuelo
+          diasAtrasadoDB: q.diasAtrasado, // ← valor guardado (para comparar)
+          descripcion: q.descripcion,
+          notificado: q.notificado,
+          ultimaNotificacion: q.ultimaNotificacion,
+          montoEditado: q.montoEditado,
+          interesManual: q.interesManual,
+        };
+      });
+
+      const totalGs = cuotasMapeadas.reduce((s, q) => s + (q.saldoTotalGs || q.saldoGs), 0);
+      const totalSaldoSinInteres = cuotasMapeadas.reduce((s, q) => s + q.saldoGs, 0);
+      const totalInteres = totalGs - totalSaldoSinInteres;
+      const maxDiasAtraso = Math.max(0, ...cuotasMapeadas.map((q) => q.diasAtraso));
+      const todasNotificadas = cuotasMapeadas.every((q) => q.notificado);
       if (ocultarNotificados && todasNotificadas) return null;
 
       return {
@@ -73,16 +113,15 @@ export async function GET(req: NextRequest) {
         totalGs,
         totalSaldoSinInteres,
         totalInteres,
-        cantidadCuotas: c.cuotas.length,
+        cantidadCuotas: cuotasMapeadas.length,
         maxDiasAtraso,
         todasNotificadas,
         // Última notificación del cliente (para mostrar cuándo fue la última vez)
-        ultimaNotificacion: c.cuotas.reduce((latest, q) => {
+        ultimaNotificacion: cuotasMapeadas.reduce((latest, q) => {
           if (!q.ultimaNotificacion) return latest;
           if (!latest) return q.ultimaNotificacion;
           return q.ultimaNotificacion > latest ? q.ultimaNotificacion : latest;
         }, null as Date | null),
-        // Datos del codeudor antiguo (campos en Cliente, compatibilidad)
         codeudor: c.codeudorNombre
           ? {
               nombre: c.codeudorNombre,
@@ -91,24 +130,33 @@ export async function GET(req: NextRequest) {
               parentesco: c.codeudorParentesco,
             }
           : null,
-        // Garantes múltiples (tabla separada Garante)
         garantes: c.garantes || [],
-        cuotas: c.cuotas.map((q) => ({
-          id: q.id,
-          fechaVcto: q.fechaVcto,
-          saldoGs: q.saldoGs,
-          saldoTotalGs: q.saldoTotalGs || q.saldoGs,
-          interesGs: q.interesGs || 0,
-          diasAtrasado: q.diasAtrasado,
-          descripcion: q.descripcion,
-          notificado: q.notificado,
-          ultimaNotificacion: q.ultimaNotificacion,
-        })),
+        cuotas: cuotasMapeadas,
       };
     })
     .filter(Boolean)
-    // Ordenar: menos vencido primero (maxDiasAtraso ascendente)
+    // === ORDENACIÓN: menos vencido primero (diasAtrasado ascendente) ===
+    // Los "Por vencer" (diasAtraso = 0) van primero, luego los poco vencidos,
+    // y los muy vencidos al final.
     .sort((a: any, b: any) => a.maxDiasAtraso - b.maxDiasAtraso);
+
+  // === Actualización en background ===
+  // Actualizar las cuotas en DB cuyos diasAtrasado cambiaron.
+  // Se hace después del return para no bloquear la respuesta.
+  // Limitado a 500 actualizaciones por request para no sobrecargar.
+  if (cuotasAActualizar.length > 0) {
+    const actualizaciones = cuotasAActualizar.slice(0, 500);
+    Promise.all(
+      actualizaciones.map(({ id, diasAtrasado }) =>
+        db.cuota.update({
+          where: { id },
+          data: { diasAtrasado },
+        }).catch(() => {})
+      )
+    ).catch(() => {
+      // Silenciar errores en background
+    });
+  }
 
   return ok({ clientes: resultado });
 }
@@ -117,16 +165,12 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return unauthorized();
-
   const body = await req.json();
   const { clienteId, cuotaIds, telefono, mensaje, tipo } = body;
-
   if (!clienteId || !telefono || !mensaje) {
     return fail("clienteId, telefono y mensaje son requeridos");
   }
 
-  // En producción: aquí se llamaría a Evolution API para enviar el WhatsApp
-  // Por ahora simulamos el envío registrando en la BD
   const noti = await db.notificacion.create({
     data: {
       empresaId: user.empresaId,
@@ -139,7 +183,6 @@ export async function POST(req: NextRequest) {
     },
   });
 
-  // Marca cuotas como notificadas
   if (cuotaIds?.length) {
     await db.cuota.updateMany({
       where: { id: { in: cuotaIds } },
@@ -147,7 +190,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Registra contacto del día
   await db.contactoDia.create({
     data: {
       empresaId: user.empresaId,

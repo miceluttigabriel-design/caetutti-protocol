@@ -275,6 +275,17 @@ function NotifCard({ cliente, onView }: {
     cliente.maxDiasAtraso > 30 ? "text-orange-400" :
     cliente.maxDiasAtraso > 0 ? "text-amber-400" : "text-emerald-400";
 
+  // Calcular la fecha de vencimiento más próxima (la primera cuota pendiente)
+  const proximaCuota = cliente.cuotas?.slice().sort((a: any, b: any) =>
+    new Date(a.fechaVcto).getTime() - new Date(b.fechaVcto).getTime()
+  )[0];
+  const proximaFechaVcto = proximaCuota?.fechaVcto;
+
+  // Estado legible: "Por vencer" / "Vencido hace Xd"
+  const estadoTexto = cliente.maxDiasAtraso > 0
+    ? `Vencido hace ${cliente.maxDiasAtraso}d`
+    : "Por vencer";
+
   return (
     <Card className={`glass-card p-3 transition-all ${todasNotificadas ? "opacity-50 border-emerald-500/20" : ""}`}>
       {/* === FILA PRINCIPAL: CLIENTE === */}
@@ -299,8 +310,16 @@ function NotifCard({ cliente, onView }: {
             </span>
             <span>·</span>
             <span className={`font-semibold ${diasColor}`}>
-              {cliente.maxDiasAtraso > 0 ? `${cliente.maxDiasAtraso}d atraso` : "Por vencer"}
+              {estadoTexto}
             </span>
+            {proximaFechaVcto && (
+              <>
+                <span>·</span>
+                <span className="text-muted-foreground" title="Próximo vencimiento">
+                  Vcto: {fmtDate(proximaFechaVcto)}
+                </span>
+              </>
+            )}
             {cliente.sucursal && <><span>·</span><span>{cliente.sucursal}</span></>}
             {cliente.ultimaNotificacion && (
               <>
@@ -1006,6 +1025,19 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
 
   const sinTelefono = !codeudor?.telefono;
 
+  // Calcular fecha de vencimiento más próxima y estado
+  const proximaCuota = cliente.cuotas?.slice().sort((a: any, b: any) =>
+    new Date(a.fechaVcto).getTime() - new Date(b.fechaVcto).getTime()
+  )[0];
+  const proximaFechaVcto = proximaCuota?.fechaVcto;
+  const diasColor =
+    cliente.maxDiasAtraso > 60 ? "text-red-400" :
+    cliente.maxDiasAtraso > 30 ? "text-orange-400" :
+    cliente.maxDiasAtraso > 0 ? "text-amber-400" : "text-emerald-400";
+  const estadoTexto = cliente.maxDiasAtraso > 0
+    ? `Vencido hace ${cliente.maxDiasAtraso}d`
+    : "Por vencer";
+
   return (
     <Card className="glass-card p-3 transition-all border-violet-500/20">
       <div className="flex items-center gap-3">
@@ -1041,6 +1073,14 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
               #{cliente.codigoEntidad}
             </Badge>
             <span className="font-medium text-foreground/80 truncate">{cliente.entidad}</span>
+            <span>·</span>
+            <span className={`font-semibold ${diasColor}`}>{estadoTexto}</span>
+            {proximaFechaVcto && (
+              <>
+                <span>·</span>
+                <span>Vcto: {fmtDate(proximaFechaVcto)}</span>
+              </>
+            )}
           </div>
         </div>
 
