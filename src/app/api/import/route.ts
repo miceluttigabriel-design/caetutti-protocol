@@ -3,6 +3,11 @@ import { db } from "@/lib/db";
 import { getSession, ok, fail, unauthorized } from "@/lib/session";
 import * as XLSX from "xlsx";
 
+// ⚠️ IMPORTANTE: Esta ruta necesita más tiempo porque procesa
+// miles de filas del Excel. En Vercel, el default es 10s.
+export const maxDuration = 60; // 60 segundos para importación masiva
+export const dynamic = "force-dynamic";
+
 /**
  * POST /api/import
  * Body: FormData con file (xlsx o json)
@@ -146,15 +151,22 @@ async function importRows(empresaId: string, rows: any[]) {
       const vendedor = parseVendedor(vendedorRaw);
 
       // === CLIENTE (datos personales) ===
+      // Limpiar valores: "*" significa "sin dato" en el Excel del cliente
+      const limpiar = (val: any) => {
+        const s = String(val ?? "").trim();
+        if (!s || s === "*" || s === "-") return null;
+        return s;
+      };
+
       const clienteData = {
         entidad,
-        ciEntidad: String(row["Ci Entidad"] ?? row["ciEntidad"] ?? "").trim() || null,
-        rucEntidad: String(row["Ruc Entidad"] ?? row["rucEntidad"] ?? "").trim() || null,
-        localidad: String(row["Localidad"] ?? row["localidad"] ?? "").trim() || null,
+        ciEntidad: limpiar(row["Ci Entidad"] ?? row["ciEntidad"]),
+        rucEntidad: limpiar(row["Ruc Entidad"] ?? row["rucEntidad"]),
+        localidad: limpiar(row["Localidad"] ?? row["localidad"]),
         telefono: normalizarTelefonoPY(String(row["Telefono"] ?? row["telefono"] ?? "").trim()),
         telefonoPivot: normalizarTelefonoPY(String(row["Telefono_pivot"] ?? row["Telefono pivot"] ?? "").trim()) || null,
         vendedor,
-        cobrador: String(row["Cobrador"] ?? row["cobrador"] ?? "").trim() || null,
+        cobrador: limpiar(row["Cobrador"] ?? row["cobrador"]),
         judicial: parseSiNo(String(row["Judicial"] ?? "").trim()),
         informconf: parseSiNo(String(row["Informconf"] ?? "").trim()),
         sucursalId: sucursal.id,
