@@ -1,0 +1,568 @@
+// CobranzasFlow — Sistema de Cobranzas Multi-tenant con IA
+// Schema: multi-empresa, multi-sucursal, multi-usuario con permisos granulares
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================================
+// TENANCY: Empresa + Sucursal
+// ============================================================================
+
+model Empresa {
+  id              String       @id @default(cuid())
+  empresaId       String       @unique // Código corto: EMP-001
+  nombre          String
+  plan            String       @default("base") // base | pro | enterprise
+  activo          Boolean      @default(true)
+  fechaVencimiento DateTime?
+  ruc             String?
+  telefono        String?
+  direccion       String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  sucursales      Sucursal[]
+  usuarios        Usuario[]
+  grupos          Grupo[]
+  clientes        Cliente[]
+  cuotas          Cuota[]
+  reglas          Regla[]
+  templatesAgrupada TemplateAgrupada?
+  templatesCodeudor TemplateCodeudor?
+  ventasMes       VentaMes[]
+  objetivos       ObjetivoDinamico[]
+  notificaciones  Notificacion[]
+  conversaciones  Conversacion[]
+  recordatorios   Recordatorio[]
+  config          ConfigEmpresa?
+  metaTemplates   MetaTemplate[]
+  metaUsoMensual  MetaUsoMensual[]
+  metaMensajeLogs MetaMensajeLog[]
+  garantes        Garante[]
+}
+
+model Sucursal {
+  id        String   @id @default(cuid())
+  nombre    String
+  codigo    String?
+  empresaId String
+  empresa   Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  clientes  Cliente[]
+  cuotas    Cuota[]
+  ventasMes VentaMes[]
+  objetivos ObjetivoDinamico[]
+
+  @@unique([empresaId, nombre])
+}
+
+// ============================================================================
+// AUTH: Usuario + Grupo + Permisos
+// ============================================================================
+
+model Usuario {
+  id                String       @id @default(cuid())
+  login             String       @unique
+  nombre            String
+  passwordHash      String
+  email             String?
+  telefono          String?
+  rol               String       @default("usuario") // admin | usuario
+  debeCambiarPass   Boolean      @default(false)
+  activo            Boolean      @default(true)
+  ultimoLogin       DateTime?
+  empresaId         String
+  empresa           Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  grupoId           String?
+  grupo             Grupo?       @relation(fields: [grupoId], references: [id])
+  sucursalesPermitidas String   @default("[]") // JSON array, vacío = todas
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+
+  notificacionesEnviadas Notificacion[]
+  recordatoriosCreados   Recordatorio[]
+  contactosDia           ContactoDia[]
+  conversacionesAsignadas Conversacion[]
+}
+
+model Grupo {
+  id          String   @id @default(cuid())
+  nombre      String
+  descripcion String?
+  esAdmin     Boolean  @default(false)
+  permisos    String   @default("[]") // JSON array de claves ver_*
+  empresaId   String
+  empresa     Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  usuarios    Usuario[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([empresaId, nombre])
+}
+
+// ============================================================================
+// NEGOCIO: Clientes + Cuotas + Codeudores
+// ============================================================================
+
+model Cliente {
+  id              String       @id @default(cuid())
+  codigoEntidad   String       // "Codigo Entidad"
+  entidad         String       // Nombre completo
+  ciEntidad       String?      // Cédula
+  rucEntidad      String?
+  localidad       String?
+  telefono        String?
+  telefonoPivot   String?
+  judicial        String?      @default("N") // S/N
+  informconf      String?      @default("N") // S/N
+  estadoRegistro  String       @default("completo") // completo | pendiente
+  empresaId       String
+  empresa         Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sucursalId      String?
+  sucursal        Sucursal?    @relation(fields: [sucursalId], references: [id])
+  vendedor        String?
+  cobrador        String?
+  // === CODEUDOR (registro manual, no viene en importación) ===
+  codeudorNombre      String?  // nombre del codeudor
+  codeudorTelefono    String?  // teléfono del codeudor
+  codeudorCi          String?  // CI del codeudor
+  codeudorParentesco  String?  // parentesco/relación con el deudor
+  cuotas          Cuota[]
+  conversaciones Conversacion[]
+  codeudorDe      Cuota[]      @relation("CodeudorRelation")
+  notificaciones  Notificacion[]
+  recordatorios   Recordatorio[]
+  contactosDia    ContactoDia[]
+  garantes        Garante[]    @relation("GaranteRelation") // múltiples garantes
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([empresaId, codigoEntidad])
+  @@index([empresaId])
+  @@index([telefono])
+}
+
+model Cuota {
+  id              String       @id @default(cuid())
+  empresaId       String
+  empresa         Empresa      @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sucursalId      String?
+  sucursal        Sucursal?    @relation(fields: [sucursalId], references: [id])
+  clienteId       String
+  cliente         Cliente      @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  codeudorId      String?
+  codeudor        Cliente?     @relation("CodeudorRelation", fields: [codeudorId], references: [id])
+  fechaEmision    DateTime
+  fechaVcto       DateTime
+  mesVcto         Int?
+  anoVcto         Int?
+  saldoGs         Float        @default(0)
+  saldoGuarani    Float?       @default(0)
+  saldoDolar      Float?       @default(0)
+  vencMes         Float?       @default(0) // monto original del mes
+  // === INTERÉS POR MORA (0.10% diario = 36.5% anual) ===
+  interesGs       Float        @default(0) // interés acumulado calculado
+  saldoTotalGs    Float        @default(0) // saldoGs + interesGs
+  tasaInteresDiaria Float      @default(0.001) // 0.10% = 0.001
+  moneda          String?      @default("Gs")
+  diasAtrasado    Int          @default(0)
+  montoEditado    Boolean      @default(false) // true si el usuario editó manualmente el saldo (no se pisa al re-importar)
+  interesManual   Boolean      @default(false) // true si el usuario editó manualmente el interés (no se recalcula automáticamente)
+  descripcion     String?
+  vendedor        String?
+  estado          String       @default("pendiente") // pendiente | cobrada | anulada
+  notificado      Boolean      @default(false)
+  ultimaNotificacion DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  notificaciones  Notificacion[]
+  recordatorios   Recordatorio[]
+
+  @@index([empresaId, estado])
+  @@index([empresaId, fechaVcto])
+  @@index([clienteId])
+}
+
+// ============================================================================
+// MOTOR DE REGLAS + NOTIFICACIONES
+// ============================================================================
+
+model Regla {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre        String
+  diasVcto      Int      // días respecto al vencimiento (-3, 0, +7, +30)
+  mensaje       String   // template con variables {Entidad}, {Saldo en Gs}...
+  activa        Boolean  @default(true)
+  cooldownDias  Int      @default(0) // días entre envíos
+  // tipo: individual | pie_cliente | pie_codeudor
+  tipo          String   @default("individual")
+  ordenPie      Int?
+  diasMinPie    Int?     // para reglas de pie (rango de días mínimo)
+  diasMaxPie    Int?     // -1 = infinito (90+)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([empresaId, activa])
+  @@index([empresaId, tipo])
+}
+
+// Template para mensajes agrupados (todas las cuotas de un cliente en un solo mensaje)
+model TemplateAgrupada {
+  id              String   @id @default(cuid())
+  empresaId       String   @unique
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cabecera        String   // saludo + total: "Estimado/a {Entidad} tiene cuotas activas..."
+  detalle         String   // se repite por cada cuota: "- Vcto: {Fecha Vcto}, monto: {Saldo en Gs}..."
+  pieEstatico     String?  // fallback si no hay reglas dinámicas
+  usarReglasDinamicas Boolean @default(true) // usar reglas de pie_cliente en lugar del pie estático
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Template para notificaciones a codeudores
+model TemplateCodeudor {
+  id              String   @id @default(cuid())
+  empresaId       String   @unique
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  cabecera        String   // saludo al codeudor: "Estimado/a codeudor, el cliente {Entidad}..."
+  detalle         String   // se repite por cada cuota
+  pieEstatico     String?  // fallback
+  usarReglasDinamicas Boolean @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Notificacion {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  clienteId     String
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cuotaId       String?
+  cuota         Cuota?   @relation(fields: [cuotaId], references: [id], onDelete: Cascade)
+  reglaId       String?
+  telefono      String
+  mensaje       String
+  tipo          String   @default("individual") // individual | agrupada | codeudor
+  estado        String   @default("enviada") // enviada | fallida | recibida | leida
+  respuesta     String?
+  enviadoPor    String?
+  usuario       Usuario? @relation(fields: [enviadoPor], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@index([empresaId, createdAt])
+  @@index([clienteId])
+}
+
+// ============================================================================
+// COMUNICACIONES: Conversaciones + Mensajes
+// ============================================================================
+
+model Conversacion {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  clienteId     String?
+  cliente       Cliente? @relation(fields: [clienteId], references: [id])
+  telefono      String   @unique
+  nombreWa      String?  // nombre del contacto en WhatsApp
+  estado        String   @default("activa") // activa | cerrada
+  asignadoA     String?
+  usuario       Usuario? @relation(fields: [asignadoA], references: [id])
+  ultimoMensaje DateTime?
+  noLeidos      Int      @default(0)
+  resumenIA     String?
+  compromisoDetectado Boolean @default(false)
+  fechaCompromiso DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  mensajes      Mensaje[]
+
+  @@index([empresaId, estado])
+}
+
+model Mensaje {
+  id            String   @id @default(cuid())
+  conversacionId String
+  conversacion  Conversacion @relation(fields: [conversacionId], references: [id], onDelete: Cascade)
+  waId          String?  // ID del mensaje en WhatsApp
+  tipo          String   @default("text") // text | audio | image | document | system
+  contenido     String
+  mediaUrl      String?
+  transcripcion String?  // para audios (Gemini)
+  esEntrante    Boolean  // true = recibido, false = enviado
+  estado        String   @default("enviado") // enviado | entregado | leido | fallido
+  createdAt     DateTime @default(now())
+
+  @@index([conversacionId, createdAt])
+}
+
+// ============================================================================
+// RECORDATORIOS + CONTACTOS DEL DÍA
+// ============================================================================
+
+model Recordatorio {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  clienteId     String
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  cuotaId       String?
+  cuota         Cuota?   @relation(fields: [cuotaId], references: [id])
+  fechaCompromiso DateTime
+  descripcion   String?
+  estado        String   @default("pendiente") // pendiente | completado | vencido
+  creadoPor     String?
+  usuario       Usuario? @relation(fields: [creadoPor], references: [id])
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([empresaId, estado])
+}
+
+model ContactoDia {
+  id            String   @id @default(cuid())
+  empresaId     String
+  usuarioId     String
+  usuario       Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  clienteId     String
+  cliente       Cliente  @relation(fields: [clienteId], references: [id], onDelete: Cascade)
+  telefono      String
+  fecha         DateTime @default(now())
+  tipo          String   @default("whatsapp") // whatsapp | llamada | visita
+  notas         String?
+
+  @@index([empresaId, fecha])
+}
+
+// ============================================================================
+// VENTAS + OBJETIVOS DINÁMICOS
+// ============================================================================
+
+model VentaMes {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sucursalId    String?
+  sucursal      Sucursal? @relation(fields: [sucursalId], references: [id])
+  anhoMes       String   // "2025-10"
+  totalVendido  Float
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([empresaId, anhoMes, sucursalId])
+}
+
+model ObjetivoDinamico {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sucursalId    String?
+  sucursal      Sucursal? @relation(fields: [sucursalId], references: [id])
+  mesesAtras    Int      @default(0) // 0 = mes actual
+  descripcion   String
+  porcentaje    Float    @default(7) // % máximo de pendiente permitido
+  activo        Boolean  @default(true)
+  orden         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+// ============================================================================
+// CONFIGURACIÓN + WHATSAPP
+// ============================================================================
+
+model ConfigEmpresa {
+  id              String   @id @default(cuid())
+  empresaId       String   @unique
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  defaultPassword String   @default("1234")
+  cooldownClientes Int     @default(0) // días, 0 = sin restricción
+  cooldownCodeudores Int   @default(0)
+
+  // === Proveedor WhatsApp ===
+  // Solo Datafy (partner oficial Meta) — más simple que Meta directo
+  whatsappProveedor String   @default("datafy") // datafy (único proveedor soportado)
+
+  // === Meta Cloud API oficial (WhatsApp Business Platform) ===
+  metaPhoneNumberId  String?  // Phone Number ID de Meta
+  metaWabaId         String?  // WhatsApp Business Account ID
+  metaAccessToken    String?  // Access Token (System User o permanente)
+  metaVerifyToken    String?  // Token para validar webhook (lo inventás vos)
+  metaBusinessId     String?  // Business Manager ID
+  metaWebhookSecret  String?  // Secret para validar X-Hub-Signature-256
+  metaPhoneNumber    String?  // Número de WhatsApp Business (display)
+  metaStatus         String   @default("disconnected") // disconnected | connecting | connected
+
+  // === Datafy (partner oficial Meta — mais simples) ===
+  datafyApiKey       String?  // API Key do dashboard Datafy
+  datafyChannelId    String?  // ID do canal ("Viza Home Micelutti")
+  datafyChannelName  String?  // Nome do canal (display)
+  datafyPhoneNumber  String?  // Número conectado
+  datafyBaseUrl      String?  @default("https://api.datafy.com.br/v1") // URL base da API
+  datafyStatus       String   @default("disconnected") // disconnected | connected
+
+  // === Límite mensual de costo (USD) ===
+  metaLimiteMensualUsd Float  @default(50) // tope de gasto mensual
+  metaAlertaPorcentaje Float  @default(80) // alertar al 80% del límite
+  metaBloquearAlLimite Boolean @default(true) // bloquear envíos al llegar al límite
+
+  // === IA ===
+  iaProveedor     String   @default("nvidia")  // nvidia | gemini | ollama | ninguno
+  // NVIDIA NIM (OpenAI-compatible, gratis)
+  nvidiaApiKey    String?
+  nvidiaModelo    String?  @default("meta/llama-3.2-11b-vision-instruct")
+  // Google Gemini (para transcripción de audios)
+  geminiApiKey    String?
+  geminiModelo    String?  @default("gemini-2.5-flash")
+  // Ollama (local, opcional)
+  ollamaUrl       String?
+  ollamaModelo    String?
+  // Transcripción (abierto para futuro proveedor)
+  transcripcionProveedor String @default("gemini") // gemini | ninguno (futuro: whisper, nvidia-asr, etc.)
+  iaResumenesActiva Boolean @default(true)
+  iaTranscripcionActiva Boolean @default(false)
+
+  // === Automatización ===
+  autoNotificar   Boolean  @default(false)
+  autoDetectarCompromisos Boolean @default(true)
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// === Plantillas de mensajes (aprobadas por Meta) ===
+model MetaTemplate {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  nombre        String   // nombre interno, ej: "recordatorio_vencimiento"
+  metaTemplateId String? // ID devuelto por Meta tras crearla
+  metaNombre    String   // nombre exacto en Meta (sin espacios, lowercase + _)
+  idioma        String   @default("es") // es, en, pt
+  categoria     String   @default("UTILITY") // UTILITY | MARKETING | AUTHENTICATION
+  cuerpo        String   // template con {{1}}, {{2}}...
+  variables     String?  // JSON: ["Entidad", "Saldo en Gs"]
+  estado        String   @default("pendiente") // pendiente | aprobada | rechazada
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([empresaId, metaNombre])
+  @@index([empresaId, estado])
+}
+
+// === Tracking de uso mensual (para control de costos) ===
+model MetaUsoMensual {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  anhoMes       String   // "2025-10"
+  // Contadores por categoría
+  enviadosUtility     Int @default(0)
+  enviadosMarketing   Int @default(0)
+  enviadosService     Int @default(0)
+  enviadosAuth        Int @default(0)
+  recibidos           Int @default(0)
+  // Costos estimados (USD)
+  costoEstimadoUsd    Float @default(0)
+  // Bloqueo
+  bloqueado           Boolean @default(false)
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([empresaId, anhoMes])
+  @@index([empresaId, anhoMes])
+}
+
+// === Log de mensajes Meta (cada envío con su costo) ===
+model MetaMensajeLog {
+  id            String   @id @default(cuid())
+  empresaId     String
+  empresa       Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  clienteId     String?
+  telefono      String
+  mensajeId     String?  // wamid.* devuelto por Meta
+  templateId    String?
+  categoria     String   // UTILITY | MARKETING | SERVICE | AUTH
+  estado        String   @default("enviado") // enviado | entregado | leido | fallido
+  costoUsd      Float    @default(0)
+  error         String?
+  createdAt     DateTime @default(now())
+
+  @@index([empresaId, createdAt])
+}
+
+// ============================================================================
+// AUDIT LOG (para el "nivel jamás visto" — trazabilidad total)
+// ============================================================================
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  empresaId     String?
+  usuarioId     String?
+  accion        String   // login, create_cliente, send_notificacion, etc.
+  entidad       String?
+  entidadId     String?
+  detalles      String?  // JSON stringificado
+  ip            String?
+  userAgent     String?
+  createdAt     DateTime @default(now())
+
+  @@index([empresaId, createdAt])
+  @@index([usuarioId])
+}
+
+// ============================================================================
+// SESSION (NextAuth)
+// ============================================================================
+
+model Session {
+  id          String   @id @default(cuid())
+  sessionToken String  @unique
+  userId      String
+  expires     DateTime
+  createdAt   DateTime @default(now())
+}
+
+model VerificationToken {
+  id         String   @id @default(cuid())
+  identifier String
+  token      String   @unique
+  expires    DateTime
+  createdAt  DateTime @default(now())
+}
+
+// ============================================================================
+// GARANTES (MÚLTIPLES POR CLIENTE)
+// ============================================================================
+// Tabla separada que permite registrar múltiples garantes/codeudores por cliente.
+// Los campos codeudor* en Cliente se mantienen por compatibilidad (primer garante).
+// Al agregar garantes nuevos, se crean registros acá.
+
+model Garante {
+  id              String   @id @default(cuid())
+  empresaId       String
+  empresa         Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  clienteId       String   // ID del cliente deudor (titular)
+  cliente         Cliente  @relation("GaranteRelation", fields: [clienteId], references: [id], onDelete: Cascade)
+  garanteNombre   String   // nombre completo del garante
+  garanteTelefono String?  // teléfono (opcional)
+  garanteCi       String?  // cédula (opcional)
+  garanteParentesco String? // parentesco/relación con el deudor (Esposo/a, Padre, etc.)
+  activo          Boolean  @default(true) // false = garante eliminado (no se borra el registro)
+  notas           String?  // notas adicionales
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([empresaId, clienteId])
+  @@index([clienteId])
+}

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 120" fill="none">
+  <!-- Máscara de Guy Fawkes (V for Vendetta / Anonymous) -->
+
+  <!-- Sombra detrás de la máscara -->
+  <ellipse cx="50" cy="64" rx="38" ry="48" fill="#000" opacity="0.4" transform="translate(2,2)"/>
+
+  <!-- Cara base (forma ovalada, color crema/marfil) -->
+  <ellipse cx="50" cy="62" rx="37" ry="48" fill="#f5f0e6"/>
+
+  <!-- Sombras de la cara (pómulos) -->
+  <path d="M22 58 Q26 68 30 72" stroke="#d4c9b0" stroke-width="2" fill="none" opacity="0.6"/>
+  <path d="M78 58 Q74 68 70 72" stroke="#d4c9b0" stroke-width="2" fill="none" opacity="0.6"/>
+
+  <!-- Sombra frente -->
+  <path d="M30 28 Q50 22 70 28" stroke="#d4c9b0" stroke-width="1.5" fill="none" opacity="0.5"/>
+
+  <!-- === CEJAS (gruesas, arqueadas) === -->
+  <!-- Ceja izquierda -->
+  <path d="M22 42 Q30 36 40 40 Q42 41 43 43 Q40 42 38 42 Q32 40 26 45 Q24 45 22 42 Z" fill="#0a0a0a"/>
+  <!-- Ceja derecha -->
+  <path d="M78 42 Q70 36 60 40 Q58 41 57 43 Q60 42 62 42 Q68 40 74 45 Q76 45 78 42 Z" fill="#0a0a0a"/>
+
+  <!-- === OJOS (óvalos negros inclinados) === -->
+  <!-- Ojo izquierdo -->
+  <ellipse cx="34" cy="52" rx="7" ry="9" fill="#0a0a0a" transform="rotate(-10 34 52)"/>
+  <!-- Ojo derecho -->
+  <ellipse cx="66" cy="52" rx="7" ry="9" fill="#0a0a0a" transform="rotate(10 66 52)"/>
+
+  <!-- Brillo sutil en ojos -->
+  <ellipse cx="36" cy="49" rx="1.5" ry="2" fill="#f5f0e6" opacity="0.3"/>
+  <ellipse cx="64" cy="49" rx="1.5" ry="2" fill="#f5f0e6" opacity="0.3"/>
+
+  <!-- === NARIZ (pequeña, redondeada) === -->
+  <path d="M48 62 Q46 68 48 72 Q50 73 52 72 Q54 68 52 62 Q50 60 48 62 Z" fill="#0a0a0a"/>
+
+  <!-- Líneas de la nariz -->
+  <path d="M44 66 Q46 67 48 66" stroke="#0a0a0a" stroke-width="0.8" fill="none" opacity="0.5"/>
+  <path d="M52 66 Q54 67 56 66" stroke="#0a0a0a" stroke-width="0.8" fill="none" opacity="0.5"/>
+
+  <!-- === BIGOTE (característico, curva hacia arriba) === -->
+  <path d="M30 80
+           Q35 78 40 79
+           Q45 80 50 79
+           Q55 80 60 79
+           Q65 78 70 80
+           Q72 82 73 84
+           Q70 82 67 82
+           Q62 83 58 82
+           Q54 82 50 82
+           Q46 82 42 82
+           Q38 83 33 82
+           Q30 82 27 84
+           Q28 82 30 80 Z"
+        fill="#0a0a0a"/>
+
+  <!-- Bigote - extremos curvados hacia arriba (característico) -->
+  <path d="M27 84 Q24 82 22 78 Q21 76 23 76 Q26 78 28 82 Z" fill="#0a0a0a"/>
+  <path d="M73 84 Q76 82 78 78 Q79 76 77 76 Q74 78 72 82 Z" fill="#0a0a0a"/>
+
+  <!-- === BARBA PUNTIGUDA (perilla) === -->
+  <path d="M44 88
+           Q46 92 46 96
+           Q48 102 50 104
+           Q52 102 54 96
+           Q54 92 56 88
+           Q50 90 44 88 Z"
+        fill="#0a0a0a"/>
+
+  <!-- Detalle de la barba -->
+  <path d="M48 96 Q50 98 52 96" stroke="#0a0a0a" stroke-width="0.8" fill="none" opacity="0.6"/>
+
+  <!-- === SONRISA (curva amplia) === -->
+  <path d="M34 82 Q50 86 66 82" stroke="#0a0a0a" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Líneas de expresión alrededor de la boca -->
+  <path d="M32 84 Q30 86 30 88" stroke="#0a0a0a" stroke-width="0.8" fill="none" opacity="0.5"/>
+  <path d="M68 84 Q70 86 70 88" stroke="#0a0a0a" stroke-width="0.8" fill="none" opacity="0.5"/>
+
+  <!-- Líneas de expresión frente -->
+  <path d="M40 32 L42 36" stroke="#0a0a0a" stroke-width="0.8" opacity="0.4"/>
+  <path d="M60 32 L58 36" stroke="#0a0a0a" stroke-width="0.8" opacity="0.4"/>
+
+  <!-- Contorno de la máscara -->
+  <ellipse cx="50" cy="62" rx="37" ry="48" stroke="#0a0a0a" stroke-width="1" fill="none" opacity="0.3"/>
+</svg>
