@@ -234,23 +234,42 @@ function NotifCard({ cliente, onView }: {
   const [showEditMonto, setShowEditMonto] = useState(false);
 
   // === MODO MANUAL: abrir WhatsApp con mensaje pre-cargado ===
-  // Genera el mensaje y abre wa.me con el texto pre-cargado DIRECTAMENTE.
-  // Truco anti-popup-blocker: abrimos la ventana vacía SYNC (conserva el gesto del
-  // usuario), y después la redirigimos a wa.me cuando ya tenemos el mensaje.
+  // Genera el mensaje y abre WhatsApp DIRECTO (sin pestaña nueva en el navegador)
+  // usando el deep link `whatsapp://send` que abre la app nativa.
+  // Si el número es inválido o falta, registra la notificación como FALLIDA
+  // en el historial con el motivo (ej: "Número inválido", "Sin teléfono").
   const abrirWhatsappCliente = async () => {
-    // 1) Abrir ventana vacía AHORA (sync) — preserva el gesto del click.
-    //    Si no lo hacemos acá, el navegador bloquea el popup por ser post-await.
-    const popup = window.open("", "_blank");
-    if (!popup) {
-      toast.error("El navegador bloqueó la ventana. Permití pop-ups para este sitio.");
-      return;
-    }
-    popup.document.write('<html><head><title>Abriendo WhatsApp…</title></head>' +
-      '<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#00ff41;font-size:14px;">' +
-      'Abriendo WhatsApp…</body></html>');
-
     try {
-      // 2) Generar el mensaje
+      // === 1) VALIDAR TELÉFONO ANTES DE ABRIR WHATSAPP ===
+      const telRaw = String(cliente.telefono || "").replace(/\D/g, "");
+      let phone = telRaw;
+      if (telRaw.startsWith("09")) phone = "595" + telRaw.slice(1);
+      else if (telRaw.startsWith("9") && telRaw.length === 9) phone = "595" + telRaw;
+
+      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
+
+      // Si no hay teléfono o es muy corto → registrar como FALLIDA
+      if (!telRaw || telRaw.length < 6) {
+        const motivo = !telRaw ? "Sin teléfono" : "Número demasiado corto";
+        await fetch("/api/notificaciones", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            clienteId: cliente.id,
+            cuotaIds,
+            telefono: cliente.telefono || "",
+            mensaje: "(no enviado — " + motivo + ")",
+            tipo: "individual",
+            estado: "fallida",
+            respuesta: motivo,
+          }),
+        });
+        toast.error(`No se pudo notificar: ${motivo}. Quedó registrado en el historial.`);
+        qc.invalidateQueries({ queryKey: ["notifs"] });
+        qc.invalidateQueries({ queryKey: ["historial"] });
+        return;
+      }
+
+      // === 2) GENERAR EL MENSAJE ===
       const genRes = await fetch("/api/notificaciones/generar-mensaje", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modo: "cliente", cliente }),
@@ -258,31 +277,32 @@ function NotifCard({ cliente, onView }: {
       if (!genRes.ok) throw new Error("Error al generar mensaje");
       const { mensaje } = await genRes.json();
 
-      // 3) Normalizar teléfono: 0986101358 → 595986101358
-      const tel = String(cliente.telefono || "").replace(/\D/g, "");
-      let phone = tel;
-      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
-      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
+      // === 3) ABRIR WHATSAPP DIRECTO CON DEEP LINK (sin pestaña nueva) ===
+      // whatsapp://send abre la app nativa directo. Usamos un <a> temporal y click.
+      const link = document.createElement("a");
+      link.href = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(mensaje)}`;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-      // 4) Redirigir la ventana ya abierta a wa.me — abre WhatsApp directamente
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
-      popup.location.href = url;
-
-      // 5) Marcar cuotas como notificadas en DB (en background, sin esperar)
-      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
-      fetch("/api/whatsapp/send", {
+      // === 4) REGISTRAR ENVÍO EN HISTORIAL (estado: enviada) ===
+      await fetch("/api/notificaciones", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          telefono: cliente.telefono, mensaje, clienteId: cliente.id, cuotaIds,
-          modoManual: true,  // no envía por API, solo marca en DB
+          clienteId: cliente.id,
+          cuotaIds,
+          telefono: cliente.telefono,
+          mensaje,
+          tipo: "individual",
+          estado: "enviada",
         }),
-      }).catch(() => {});
+      });
 
       toast.success(`Abriendo WhatsApp para ${cliente.entidad}`);
       qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["historial"] });
     } catch (e: any) {
-      // Si falla, cerrar la ventana vacía
-      try { popup.close(); } catch {}
       toast.error(e.message || "Error al abrir WhatsApp");
     }
   };
@@ -985,24 +1005,40 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
   const codeudor = cliente.codeudor;
 
   // === MODO MANUAL: abrir WhatsApp con mensaje pre-cargado para el codeudor ===
-  // Truco anti-popup-blocker: ventana abierta SYNC, redirigida después del await.
+  // Usa deep link whatsapp:// para abrir la app directo (sin pestaña nueva).
+  // Registra como FALLIDA si el número es inválido o falta.
   const abrirWhatsappCodeudor = async () => {
-    if (!codeudor?.telefono) {
-      toast.error("El codeudor no tiene teléfono");
+    // === 1) VALIDAR TELÉFONO DEL CODEUDOR ===
+    const telRaw = String(codeudor?.telefono || "").replace(/\D/g, "");
+    let phone = telRaw;
+    if (telRaw.startsWith("09")) phone = "595" + telRaw.slice(1);
+    else if (telRaw.startsWith("9") && telRaw.length === 9) phone = "595" + telRaw;
+
+    const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
+
+    // Si no hay teléfono o es muy corto → registrar como FALLIDA
+    if (!telRaw || telRaw.length < 6) {
+      const motivo = !telRaw ? "Codeudor sin teléfono" : "Número de codeudor demasiado corto";
+      await fetch("/api/notificaciones", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          clienteId: cliente.id,
+          cuotaIds,
+          telefono: codeudor?.telefono || "",
+          mensaje: "(no enviado — " + motivo + ")",
+          tipo: "codeudor",
+          estado: "fallida",
+          respuesta: motivo,
+        }),
+      });
+      toast.error(`No se pudo notificar al codeudor: ${motivo}. Quedó en el historial.`);
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["historial"] });
       return;
     }
-    // Abrir ventana vacía AHORA (sync) para preservar el gesto del click.
-    const popup = window.open("", "_blank");
-    if (!popup) {
-      toast.error("El navegador bloqueó la ventana. Permití pop-ups para este sitio.");
-      return;
-    }
-    popup.document.write('<html><head><title>Abriendo WhatsApp…</title></head>' +
-      '<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#00ff41;font-size:14px;">' +
-      'Abriendo WhatsApp…</body></html>');
 
     try {
-      // Generar mensaje para el codeudor
+      // 2) Generar mensaje para el codeudor
       const genRes = await fetch("/api/notificaciones/generar-mensaje", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modo: "codeudor", cliente }),
@@ -1010,34 +1046,31 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
       if (!genRes.ok) throw new Error("Error al generar mensaje");
       const { mensaje } = await genRes.json();
 
-      // Normalizar teléfono
-      const tel = String(codeudor.telefono).replace(/\D/g, "");
-      let phone = tel;
-      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
-      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
+      // 3) Abrir WhatsApp directo con deep link (sin pestaña nueva)
+      const link = document.createElement("a");
+      link.href = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(mensaje)}`;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
 
-      // Redirigir la ventana ya abierta a wa.me — abre WhatsApp directamente
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
-      popup.location.href = url;
-
-      // Marcar cuotas en DB (en background, sin esperar)
-      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
-      fetch("/api/whatsapp/send", {
+      // 4) Registrar envío en historial (estado: enviada)
+      await fetch("/api/notificaciones", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           telefono: codeudor.telefono,
           mensaje,
           clienteId: cliente.id,
           cuotaIds,
-          modoManual: true,
-          esCodeudorGarante: true,  // NO marca cuotas del titular como notificadas
+          tipo: "codeudor",
+          estado: "enviada",
         }),
-      }).catch(() => {});
+      });
 
       toast.success(`Abriendo WhatsApp para ${codeudor.nombre}`);
       qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["historial"] });
     } catch (e: any) {
-      try { popup.close(); } catch {}
       toast.error(e.message || "Error al abrir WhatsApp");
     }
   };

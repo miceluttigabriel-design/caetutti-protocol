@@ -7,14 +7,16 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, RefreshCw, History, Send, CheckCircle2, XCircle } from "lucide-react";
+import { Search, RefreshCw, History, Send, CheckCircle2, XCircle, Filter } from "lucide-react";
 import { fmtDateTime, fmtPhone } from "@/lib/format";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export function HistorialModule() {
   const [filters, setFilters] = useState({
     desde: "",
     hasta: "",
     search: "",
+    estado: "todas", // todas | enviada | fallida | recibida | leida
   });
   const [applied, setApplied] = useState<any>(null);
 
@@ -25,6 +27,7 @@ export function HistorialModule() {
       if (applied?.desde) params.set("desde", applied.desde);
       if (applied?.hasta) params.set("hasta", applied.hasta);
       if (applied?.search) params.set("search", applied.search);
+      if (applied?.estado && applied.estado !== "todas") params.set("estado", applied.estado);
       const r = await fetch(`/api/historial?${params}`);
       if (!r.ok) throw new Error();
       return r.json();
@@ -54,6 +57,22 @@ export function HistorialModule() {
               <Input value={filters.search} onChange={(e) => setFilters({...filters, search: e.target.value})}
                 placeholder="Cliente, teléfono, mensaje…" className="pl-9" />
             </div>
+          </div>
+          <div>
+            <label className="text-[10px] text-muted-foreground uppercase">Estado</label>
+            <Select value={filters.estado} onValueChange={(v) => setFilters({...filters, estado: v})}>
+              <SelectTrigger className="w-40">
+                <Filter className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="todas">Todos</SelectItem>
+                <SelectItem value="enviada">Enviadas</SelectItem>
+                <SelectItem value="fallida">Fallidas</SelectItem>
+                <SelectItem value="recibida">Recibidas</SelectItem>
+                <SelectItem value="leida">Leídas</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
           <Button onClick={() => setApplied({...filters})} className="glow-primary">
             <Search className="w-3.5 h-3.5 mr-1" /> Buscar
@@ -86,14 +105,15 @@ export function HistorialModule() {
                 <th className="text-left px-3 py-2 text-xs uppercase text-muted-foreground">Mensaje</th>
                 <th className="text-left px-3 py-2 text-xs uppercase text-muted-foreground">Enviado por</th>
                 <th className="text-center px-3 py-2 text-xs uppercase text-muted-foreground">Estado</th>
+                <th className="text-left px-3 py-2 text-xs uppercase text-muted-foreground">Motivo</th>
               </tr>
             </thead>
             <tbody>
               {isLoading && Array.from({ length: 5 }).map((_, i) => (
-                <tr key={i}><td colSpan={6} className="p-3"><Skeleton className="h-6" /></td></tr>
+                <tr key={i}><td colSpan={7} className="p-3"><Skeleton className="h-6" /></td></tr>
               ))}
               {!isLoading && notifs.length === 0 && (
-                <tr><td colSpan={6} className="text-center py-10 text-muted-foreground text-sm">
+                <tr><td colSpan={7} className="text-center py-10 text-muted-foreground text-sm">
                   {applied ? "No hay notificaciones en el rango seleccionado." : "Configura filtros y busca para ver el historial."}
                 </td></tr>
               )}
@@ -115,6 +135,9 @@ export function HistorialModule() {
                     } className="text-[10px]">
                       {n.estado}
                     </Badge>
+                  </td>
+                  <td className="px-3 py-2 text-xs text-red-400/80 max-w-[180px] truncate" title={n.respuesta || ""}>
+                    {n.respuesta || "—"}
                   </td>
                 </tr>
               ))}

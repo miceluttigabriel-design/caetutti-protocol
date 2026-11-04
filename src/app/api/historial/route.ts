@@ -5,7 +5,7 @@ import { getSession, ok, unauthorized, sucursalFilter } from "@/lib/session";
 /**
  * GET /api/historial
  * Historial completo de notificaciones enviadas.
- * ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=ID&search=texto
+ * ?desde=YYYY-MM-DD&hasta=YYYY-MM-DD&sucursal=ID&search=texto&estado=fallida
  */
 export async function GET(req: NextRequest) {
   const user = await getSession();
@@ -16,6 +16,7 @@ export async function GET(req: NextRequest) {
   const hasta = searchParams.get("hasta");
   const sucursalId = searchParams.get("sucursal");
   const search = searchParams.get("search");
+  const estado = searchParams.get("estado"); // enviada | fallida | recibida | leida
 
   const where: any = {
     empresaId: user.empresaId,
@@ -28,6 +29,9 @@ export async function GET(req: NextRequest) {
   }
   if (sucursalId && sucursalId !== "__TODAS__") {
     where.cliente = { sucursalId };
+  }
+  if (estado && estado !== "todas") {
+    where.estado = estado;
   }
   if (search) {
     where.OR = [

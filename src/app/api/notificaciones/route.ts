@@ -222,43 +222,54 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/notificaciones — registra envío de notificación
+// Body: { clienteId, cuotaIds, telefono, mensaje, tipo, estado?, respuesta? }
+//   estado: "enviada" (default) | "fallida"
+//   respuesta: motivo del fallo (ej: "Número inválido", "Teléfono vacío")
 export async function POST(req: NextRequest) {
   const user = await getSession();
   if (!user) return unauthorized();
   const body = await req.json();
-  const { clienteId, cuotaIds, telefono, mensaje, tipo } = body;
-  if (!clienteId || !telefono || !mensaje) {
-    return fail("clienteId, telefono y mensaje son requeridos");
+  const { clienteId, cuotaIds, telefono, mensaje, tipo, estado, respuesta } = body;
+  if (!clienteId || !mensaje) {
+    return fail("clienteId y mensaje son requeridos");
   }
+  // Teléfono puede venir vacío (caso "Sin teléfono") → se registra como fallida
+  const telefonoFinal = telefono || "";
+  const estadoFinal = estado === "fallida" ? "fallida" : "enviada";
 
   const noti = await db.notificacion.create({
     data: {
       empresaId: user.empresaId,
       clienteId,
-      telefono,
+      telefono: telefonoFinal,
       mensaje,
       tipo: tipo || "individual",
-      estado: "enviada",
+      estado: estadoFinal,
+      respuesta: estadoFinal === "fallida" ? (respuesta || "Fallida") : null,
       enviadoPor: user.id,
     },
   });
 
-  if (cuotaIds?.length) {
+  // Solo marcar cuotas como notificadas si el envío fue exitoso
+  if (estadoFinal === "enviada" && cuotaIds?.length) {
     await db.cuota.updateMany({
       where: { id: { in: cuotaIds } },
       data: { notificado: true, ultimaNotificacion: new Date() },
     });
   }
 
-  await db.contactoDia.create({
-    data: {
-      empresaId: user.empresaId,
-      usuarioId: user.id,
-      clienteId,
-      telefono,
-      tipo: "whatsapp",
-    },
-  });
+  // Solo registrar contacto del día si el envío fue exitoso
+  if (estadoFinal === "enviada") {
+    await db.contactoDia.create({
+      data: {
+        empresaId: user.empresaId,
+        usuarioId: user.id,
+        clienteId,
+        telefono: telefonoFinal,
+        tipo: "whatsapp",
+      },
+    });
+  }
 
   return ok({ notificacion: noti });
 }
