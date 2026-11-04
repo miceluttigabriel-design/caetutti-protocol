@@ -1,65 +1,70 @@
-# 🎯 FIX: WhatsApp del Codeudor usa SU teléfono (no el del titular)
+# 🎯 FIX: "Registrar Codeudor" NO reemplaza el codeudor existente
 
-## ⭐ El bug
-Cuando apretabas "Notificar" en el codeudor, el mensaje se abría en WhatsApp con
-el número del **titular**, no con el número del codeudor que cargaste.
+## ⭐ El bug que reportaste
+Cuando un titular ya tiene un codeudor registrado y apretás "Registrar Codeudor"
+para agregar otro, el nuevo **reemplaza** al anterior (se borra el 1ro y queda
+el 2do en su lugar).
 
 ## 🔍 La causa
-2 problemas combinados:
+El botón "Registrar Codeudor" abre el `CodeudorDialog` que hace `PUT /api/clientes/[id]/codeudor`.
+Ese endpoint está diseñado para **un solo codeudor por titular** (sistema viejo) —
+al guardar, sobrescribe los campos `codeudorNombre/codeudorTelefono` del titular.
 
-1. **Al seleccionar un cliente sugerido como codeudor**, el código copiaba su
-   teléfono automáticamente. Si el usuario seleccionaba al titular (o un cliente
-   con el mismo teléfono), el codeudor quedaba con el teléfono del titular.
+Por eso el 2do codeudor pisa al 1ro.
 
-2. **`abrirWhatsappCodeudor` no validaba** que el teléfono del codeudor sea
-   distinto al del titular. Si eran iguales, abría WhatsApp con ese número
-   (que era el del titular).
+## 🛠️ La solución (sin tocar el sistema viejo)
 
-## 🛠️ La solución (sin tocar nada más)
+Ahora cuando un titular **YA tiene codeudor**, aparece un botón nuevo:
+> **"¿Necesitás otro garante para este titular?" → [Agregar Otro Garante]**
 
-### 1. `abrirWhatsappCodeudor` — Validación de seguridad
-- Usa SIEMPRE `cliente.codeudor.telefono` (no fallback al titular)
-- Si el codeudor no tiene teléfono → avisa y NO abre WhatsApp
-- **Si el teléfono del codeudor es igual al del titular** → avisa y NO abre WhatsApp:
-  > "El teléfono del codeudor es igual al del titular. Editá el codeudor con su número correcto."
-- El toast de éxito ahora muestra el número: `"Abriendo WhatsApp para SANGALLI (595986674686)"`
+Ese botón **NO** abre el `CodeudorDialog` (que reemplaza). En su lugar, dispara
+un evento que abre el formulario de **AGREGAR GARANTE** (sistema nuevo, tabla
+`Garante`, que permite múltiples sin borrar el codeudor principal).
 
-### 2. `seleccionarSugerido` — No copiar teléfono si es igual al del titular
-- Al seleccionar un cliente sugerido como codeudor, si su teléfono es igual al
-  del titular, NO se copia (queda vacío para que el usuario lo cargue manualmente)
-- Avisa con toast: "El cliente seleccionado tiene el mismo teléfono que el titular. Cargá el teléfono del codeudor manualmente."
+### Flujo nuevo:
+1. Titular **SIN codeudor** → botón "Registrar Codeudor" (violeta) → abre
+   `CodeudorDialog` → registra el 1er codeudor (sistema viejo, OK)
+2. Titular **CON codeudor** → aparece banner "¿Necesitás otro garante?" con
+   botón **"Agregar Otro Garante"** → abre formulario de garantes → agrega
+   sin borrar el codeudor principal ✅
+3. Los garantes adicionales se listan en la sección "Garantes (N)" abajo
 
 ## 📦 Solo 1 archivo
 - `src/components/modules/notificaciones.tsx`
 
 ## 🔧 Cómo aplicar
 1. Copiar `src/components/modules/notificaciones.tsx` del ZIP → reemplazar el del repo
-2. GitHub Desktop → commit (ej: "fix whatsapp codeudor usa su telefono") → **Push**
+2. GitHub Desktop → commit (ej: "registrar codeudor no reemplaza") → **Push**
 3. Esperar 2-3 min el deploy
 
 ## ⚠️ No hace falta ejecutar nada en consola
 
 ## 🧪 Después probá
 
-### Caso 1: Codeudor con teléfono distinto al titular
-1. Editá el codeudor → cargá un número DISTINTO al del titular → Guardar
-2. Apretá "Notificar" en el codeudor
-3. WhatsApp se abre con el número del CODEUDOR ✓
-4. El toast dice: "Abriendo WhatsApp para SANGALLI (595XXXXXXXX)"
+### Caso 1: Titular sin codeudor (registra el 1ro)
+1. Buscá un titular sin codeudor
+2. Apretá "Registrar Codeudor" → se abre el dialog violeta
+3. Completá → Guardar → queda el 1er codeudor ✓
 
-### Caso 2: Codeudor con teléfono igual al titular (bug actual de SANGALLI)
-1. Apretá "Notificar" en el codeudor SANGALLI (que tiene el mismo teléfono que BOGARIN)
-2. Aparece toast: "El teléfono del codeudor es igual al del titular. Editá el codeudor con su número correcto."
-3. NO se abre WhatsApp → tenés que editar el codeudor y poner el número correcto
+### Caso 2: Titular CON codeudor (agrega más sin borrar)
+1. Buscá un titular que ya tenga codeudor (ej: BOGARIN con SANGALLI)
+2. En su tarjeta vas a ver el banner:
+   > "¿Necesitás otro garante para este titular?" → **[Agregar Otro Garante]**
+3. Apretá ese botón → se abre el formulario de garantes (azul claro)
+4. Completá nombre + teléfono → Guardar
+5. El nuevo garante queda en la sección "Garantes (N)" abajo
+6. **El codeudor principal (SANGALLI) NO se borró** ✓
+7. Podés repetir y agregar todos los que quieras
 
-### Caso 3: Seleccionar cliente sugerido con mismo teléfono
-1. Al buscar un cliente para agregar como codeudor, si tiene el mismo teléfono que el titular
-2. El teléfono NO se autocompleta → queda vacío
-3. Toast de advertencia → cargás el teléfono manualmente
+### Importante
+- NO apretes "Editar" en el codeudor principal para agregar otro (eso edita el existente)
+- Usá siempre el botón **"Agregar Otro Garante"** (azul claro) para sumar más
+- Los garantes adicionales se notifican independientemente con su propio botón
 
 ## ✅ Conservado intacto
-- El WhatsApp del TITULAR sigue funcionando igual (usa `cliente.telefono`)
-- Los codeudores en Notificaciones siguen figurando igual
-- El resto del sistema no se tocó
+- El codeudor principal (sistema viejo) sigue funcionando igual
+- Los garantes existentes no se modifican
+- El sistema de notificaciones no se tocó
+- La BD ya soporta múltiples garantes (no se modificó el schema)
 
 ✅ TypeScript: 0 errores.

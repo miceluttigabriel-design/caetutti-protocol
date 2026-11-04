@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -369,6 +369,29 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
       )}
 
       {/* === FILA TERCIARIA: GARANTES MÚLTIPLES === */}
+      {/* 🛠️ Si el titular YA tiene codeudor, mostrar botón "Agregar Otro Garante"
+          que abre el formulario de garantes (NO reemplaza el codeudor existente). */}
+      {cliente.codeudor && (
+        <div className="mt-2 pt-2 border-t border-violet-500/20 flex items-center justify-between bg-violet-500/5 -mx-3 -mb-3 px-3 pb-2 rounded-b-xl">
+          <p className="text-[11px] text-violet-300 italic flex items-center gap-1">
+            <UserPlus className="w-3 h-3" /> ¿Necesitás otro garante para este titular?
+          </p>
+          <Button
+            variant="outline" size="sm"
+            className="h-7 text-xs text-violet-300 border-violet-500/40 hover:bg-violet-500/10 px-3 font-semibold"
+            onClick={() => {
+              // Disparar el apertura del formulario de garantes
+              // usando un evento custom que GarantesSection escucha
+              const event = new CustomEvent("abrir-formulario-garante", { detail: { clienteId: cliente.id } });
+              window.dispatchEvent(event);
+            }}
+          >
+            <UserPlus className="w-3.5 h-3.5 mr-1" /> Agregar Otro Garante
+          </Button>
+        </div>
+      )}
+
+      {/* === FILA FINAL: GARANTES MÚLTIPLES === */}
       <GarantesSection cliente={cliente} />
     </Card>
   );
@@ -389,6 +412,20 @@ function GarantesSection({ cliente }: { cliente: any }) {
     garanteParentesco: "",
   });
   const [saving, setSaving] = useState(false);
+
+  // 🛠️ Escuchar evento custom "abrir-formulario-garante" disparado por el botón
+  // "Agregar Otro Garante" que aparece cuando el titular ya tiene codeudor.
+  useEffect(() => {
+    const handler = (e: any) => {
+      if (e.detail?.clienteId === cliente.id) {
+        setShowAgregar(true);
+        // Limpiar el form por las dudas
+        setNuevoGarante({ garanteNombre: "", garanteTelefono: "", garanteCi: "", garanteParentesco: "" });
+      }
+    };
+    window.addEventListener("abrir-formulario-garante", handler);
+    return () => window.removeEventListener("abrir-formulario-garante", handler);
+  }, [cliente.id]);
 
   const garantes = cliente.garantes || [];
 
@@ -500,8 +537,8 @@ function GarantesSection({ cliente }: { cliente: any }) {
           <UserPlus className="w-3 h-3" /> Sin garantes adicionales
         </p>
         <Button
-          variant="ghost" size="sm"
-          className="h-7 text-xs text-sky-300 hover:bg-sky-500/10"
+          variant="outline" size="sm"
+          className="h-7 text-xs text-sky-300 border-sky-500/40 hover:bg-sky-500/10 px-3 font-semibold"
           onClick={() => setShowAgregar(true)}
         >
           <UserPlus className="w-3.5 h-3.5 mr-1" /> Agregar Garante
@@ -520,11 +557,12 @@ function GarantesSection({ cliente }: { cliente: any }) {
               <UserPlus className="w-3 h-3" /> Garantes ({garantes.length})
             </p>
             <Button
-              variant="ghost" size="sm"
-              className="h-6 text-[11px] text-sky-300 hover:bg-sky-500/10 px-2"
+              variant="outline" size="sm"
+              className="h-7 text-xs text-sky-300 border-sky-500/40 hover:bg-sky-500/10 px-3 font-semibold"
               onClick={() => setShowAgregar(true)}
+              disabled={showAgregar}
             >
-              <UserPlus className="w-3 h-3 mr-1" /> Agregar
+              <UserPlus className="w-3.5 h-3.5 mr-1" /> Agregar Otro Garante
             </Button>
           </div>
           {garantes.map((g: any, idx: number) => (
@@ -589,6 +627,16 @@ function GarantesSection({ cliente }: { cliente: any }) {
               </div>
             </div>
           ))}
+          {/* Botón al final de la lista para agregar otro garante (si el formulario no está abierto) */}
+          {!showAgregar && (
+            <Button
+              variant="outline" size="sm"
+              className="w-full h-8 text-xs text-sky-300 border-sky-500/40 border-dashed hover:bg-sky-500/10 mt-1"
+              onClick={() => setShowAgregar(true)}
+            >
+              <UserPlus className="w-3.5 h-3.5 mr-1" /> Agregar Otro Garante
+            </Button>
+          )}
         </div>
       )}
 
