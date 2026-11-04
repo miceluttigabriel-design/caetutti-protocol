@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,21 +11,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Send, Eye, RefreshCw, Phone, AlertTriangle, UserPlus, User, Search, Trash2, ShieldCheck, Edit2, DollarSign, Save, Bot, Bell, Brain } from "lucide-react";
+import { Send, Eye, RefreshCw, Phone, AlertTriangle, UserPlus, User, Search, Trash2, ShieldCheck, Edit2, DollarSign } from "lucide-react";
 import { fmtGs, fmtPhone, diasEstado, fmtRelative, fmtDateTime, fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
 export function NotificacionesModule({ sucursal }: { sucursal: string }) {
-  const qc = useQueryClient();
   const [ocultarNotificados, setOcultarNotificados] = useState(false);
   const [search, setSearch] = useState("");
   const [viewing, setViewing] = useState<any | null>(null);
   const [viewingModo, setViewingModo] = useState<"cliente" | "codeudor">("cliente");
   const [editingCodeudor, setEditingCodeudor] = useState<any | null>(null);
-  // Para crear un nuevo codeudor desde la pestaña "Codeudores" (busca titular primero)
-  const [nuevoCodeudor, setNuevoCodeudor] = useState(false);
-  // Pestaña activa: "titulares" (clientes) o "codeudores" (gestión aparte)
-  const [tab, setTab] = useState<"titulares" | "codeudores">("titulares");
 
   const { data, isLoading, refetch, isFetching } = useQuery({
     queryKey: ["notifs", sucursal, ocultarNotificados],
@@ -50,37 +45,8 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
 
   return (
     <div className="space-y-4">
-      {/* === Panel de Automatización (movido desde Configuración para acceso rápido) === */}
-      <AutomatizacionPanel />
-
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2 items-center">
-        {/* Pestañas: Titulares / Codeudores */}
-        <div className="flex gap-1 p-1 rounded-lg bg-secondary/40 border border-border/40">
-          <button
-            onClick={() => setTab("titulares")}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-              tab === "titulares"
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <User className="w-3 h-3 inline mr-1" />
-            Titulares
-          </button>
-          <button
-            onClick={() => setTab("codeudores")}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-              tab === "codeudores"
-                ? "bg-violet-500 text-white"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
-          >
-            <UserPlus className="w-3 h-3 inline mr-1" />
-            Codeudores
-          </button>
-        </div>
-
         <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
           <RefreshCw className={`w-3.5 h-3.5 mr-1.5 ${isFetching ? "animate-spin" : ""}`} /> Actualizar
         </Button>
@@ -124,70 +90,20 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
         {isLoading && Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
         {!isLoading && filtered.length === 0 && (
           <Card className="glass-card p-8 text-center">
-            <p className="text-muted-foreground text-sm">
-              {tab === "codeudores"
-                ? "No hay codeudores registrados para los filtros seleccionados."
-                : "No hay clientes con cuotas pendientes para los filtros seleccionados."}
-            </p>
+            <p className="text-muted-foreground text-sm">No hay clientes con cuotas pendientes para los filtros seleccionados.</p>
           </Card>
         )}
-        {/* === PESTAÑA TITULARES: lista de clientes (sin la fila de codeudor debajo) === */}
-        {!isLoading && tab === "titulares" && filtered.map((c) => (
+        {!isLoading && filtered.slice(0, 100).map((c) => (
           <NotifCard
             key={c.id}
             cliente={c}
             onView={() => { setViewingModo("cliente"); setViewing(c); }}
+            onEditCodeudor={() => setEditingCodeudor(c)}
           />
         ))}
-        {/* === PESTAÑA CODEUDORES: lista de codeudores (gestión aparte) === */}
-        {!isLoading && tab === "codeudores" && (
-          <>
-            {/* Botón para registrar nuevo codeudor */}
-            <Card className="glass-card p-3 border-violet-500/30 bg-violet-500/5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-semibold text-violet-300">Gestión de Codeudores</p>
-                  <p className="text-[11px] text-muted-foreground">
-                    {filtered.filter((c) => c.codeudor).length} codeudor(es) registrado(s) · Podés registrar uno nuevo buscando al titular
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  className="bg-violet-500 hover:bg-violet-600 text-white"
-                  onClick={() => setNuevoCodeudor(true)}
-                >
-                  <UserPlus className="w-3.5 h-3.5 mr-1" />
-                  Registrar Codeudor
-                </Button>
-              </div>
-            </Card>
-
-            {/* Lista de codeudores existentes */}
-            {filtered.filter((c) => c.codeudor).length === 0 ? (
-              <Card className="glass-card p-8 text-center">
-                <UserPlus className="w-10 h-10 mx-auto mb-3 text-violet-400/50" />
-                <p className="text-sm text-muted-foreground">
-                  No hay codeudores registrados.
-                </p>
-                <p className="text-[11px] text-muted-foreground mt-1">
-                  Hacé clic en "Registrar Codeudor" para crear uno nuevo.
-                </p>
-              </Card>
-            ) : (
-              filtered.filter((c) => c.codeudor).map((c) => (
-                <CodeudorCard
-                  key={`cod-${c.id}`}
-                  cliente={c}
-                  onView={() => { setViewingModo("codeudor"); setViewing(c); }}
-                  onEditCodeudor={() => setEditingCodeudor(c)}
-                />
-              ))
-            )}
-          </>
-        )}
-        {filtered.length > 0 && (
+        {filtered.length > 100 && (
           <p className="text-center text-xs text-muted-foreground py-2">
-            Total: {filtered.length} cliente(s) {tab === "codeudores" && `· ${filtered.filter((c) => c.codeudor).length} codeudor(es)`}
+            Mostrando 100 de {filtered.length} — usa el buscador para filtrar
           </p>
         )}
       </div>
@@ -206,70 +122,27 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
           onClose={() => setEditingCodeudor(null)}
         />
       )}
-
-      {nuevoCodeudor && (
-        <NuevoCodeudorDialog
-          onClose={() => setNuevoCodeudor(false)}
-          onCreado={() => {
-            setNuevoCodeudor(false);
-            qc.invalidateQueries({ queryKey: ["notifs"] });
-            qc.invalidateQueries({ queryKey: ["clientes"] });
-          }}
-        />
-      )}
     </div>
   );
 }
 
 // ============================================================
-// TARJETA DE CLIENTE (TITULAR) — sin codeudor debajo
-// (los codeudores se gestionan aparte en la pestaña "Codeudores")
+// TARJETA DE CLIENTE + CODEUDOR DEBAJO
 // ============================================================
 
-function NotifCard({ cliente, onView }: {
+function NotifCard({ cliente, onView, onEditCodeudor }: {
   cliente: any;
   onView: () => void;
+  onEditCodeudor: () => void;
 }) {
   const qc = useQueryClient();
   const [showEditMonto, setShowEditMonto] = useState(false);
 
   // === MODO MANUAL: abrir WhatsApp con mensaje pre-cargado ===
-  // Genera el mensaje y abre WhatsApp DIRECTO (sin pestaña nueva en el navegador)
-  // usando el deep link `whatsapp://send` que abre la app nativa.
-  // Si el número es inválido o falta, registra la notificación como FALLIDA
-  // en el historial con el motivo (ej: "Número inválido", "Sin teléfono").
+  // Genera el mensaje y abre wa.me con el texto pre-cargado
   const abrirWhatsappCliente = async () => {
     try {
-      // === 1) VALIDAR TELÉFONO ANTES DE ABRIR WHATSAPP ===
-      const telRaw = String(cliente.telefono || "").replace(/\D/g, "");
-      let phone = telRaw;
-      if (telRaw.startsWith("09")) phone = "595" + telRaw.slice(1);
-      else if (telRaw.startsWith("9") && telRaw.length === 9) phone = "595" + telRaw;
-
-      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
-
-      // Si no hay teléfono o es muy corto → registrar como FALLIDA
-      if (!telRaw || telRaw.length < 6) {
-        const motivo = !telRaw ? "Sin teléfono" : "Número demasiado corto";
-        await fetch("/api/notificaciones", {
-          method: "POST", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            clienteId: cliente.id,
-            cuotaIds,
-            telefono: cliente.telefono || "",
-            mensaje: "(no enviado — " + motivo + ")",
-            tipo: "individual",
-            estado: "fallida",
-            respuesta: motivo,
-          }),
-        });
-        toast.error(`No se pudo notificar: ${motivo}. Quedó registrado en el historial.`);
-        qc.invalidateQueries({ queryKey: ["notifs"] });
-        qc.invalidateQueries({ queryKey: ["historial"] });
-        return;
-      }
-
-      // === 2) GENERAR EL MENSAJE ===
+      // Generar mensaje
       const genRes = await fetch("/api/notificaciones/generar-mensaje", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modo: "cliente", cliente }),
@@ -277,33 +150,77 @@ function NotifCard({ cliente, onView }: {
       if (!genRes.ok) throw new Error("Error al generar mensaje");
       const { mensaje } = await genRes.json();
 
-      // === 3) ABRIR WHATSAPP DIRECTO CON DEEP LINK (sin pestaña nueva) ===
-      // whatsapp://send abre la app nativa directo. Usamos un <a> temporal y click.
-      const link = document.createElement("a");
-      link.href = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(mensaje)}`;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
+      // Normalizar teléfono: 0986101358 → 595986101358
+      const tel = String(cliente.telefono || "").replace(/\D/g, "");
+      let phone = tel;
+      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
+      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
 
-      // === 4) REGISTRAR ENVÍO EN HISTORIAL (estado: enviada) ===
-      await fetch("/api/notificaciones", {
+      // Marcar cuotas como notificadas en la DB
+      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
+      await fetch("/api/whatsapp/send", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          clienteId: cliente.id,
-          cuotaIds,
-          telefono: cliente.telefono,
-          mensaje,
-          tipo: "individual",
-          estado: "enviada",
+          telefono: cliente.telefono, mensaje, clienteId: cliente.id, cuotaIds,
+          modoManual: true,  // no envía por API, solo marca en DB
         }),
       });
 
+      // Abrir WhatsApp con mensaje pre-cargado
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
+      window.open(url, "_blank");
       toast.success(`Abriendo WhatsApp para ${cliente.entidad}`);
       qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["historial"] });
     } catch (e: any) {
-      toast.error(e.message || "Error al abrir WhatsApp");
+      toast.error(e.message || "Error");
+    }
+  };
+
+  const abrirWhatsappCodeudor = async () => {
+    try {
+      // 🛠️ FIX CRÍTICO: usar SIEMPRE el teléfono del codeudor, NUNCA el del titular.
+      // Si el codeudor no tiene teléfono, no abrir WhatsApp (avisar al usuario).
+      const telefonoCodeudor = cliente.codeudor?.telefono;
+      if (!telefonoCodeudor) {
+        toast.error("El codeudor no tiene teléfono. Editá el codeudor para agregar uno.");
+        return;
+      }
+
+      // 🛠️ Validación extra: si el teléfono del codeudor es igual al del titular,
+      // avisar al usuario (probablemente se copió por error al seleccionar sugerido).
+      if (cliente.telefono && telefonoCodeudor === cliente.telefono) {
+        toast.error("El teléfono del codeudor es igual al del titular. Editá el codeudor con su número correcto.");
+        return;
+      }
+
+      const genRes = await fetch("/api/notificaciones/generar-mensaje", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modo: "codeudor", cliente }),
+      });
+      if (!genRes.ok) throw new Error("Error al generar mensaje");
+      const { mensaje } = await genRes.json();
+
+      // 🛠️ Usar telefonoCodeudor (no cliente.codeudor.telefono directo, ya validado arriba)
+      const tel = String(telefonoCodeudor).replace(/\D/g, "");
+      let phone = tel;
+      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
+      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
+
+      const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
+      await fetch("/api/whatsapp/send", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          telefono: telefonoCodeudor, mensaje, clienteId: cliente.id, cuotaIds,
+          modoManual: true,
+        }),
+      });
+
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
+      window.open(url, "_blank");
+      toast.success(`Abriendo WhatsApp para ${cliente.codeudor.nombre} (${phone})`);
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+    } catch (e: any) {
+      toast.error(e.message || "Error");
     }
   };
 
@@ -313,17 +230,6 @@ function NotifCard({ cliente, onView }: {
     cliente.maxDiasAtraso > 60 ? "text-red-400" :
     cliente.maxDiasAtraso > 30 ? "text-orange-400" :
     cliente.maxDiasAtraso > 0 ? "text-amber-400" : "text-emerald-400";
-
-  // "Vcto:" de la tarjeta:
-  //   - Si está en bloque POR VENCER → su cuota por vencer más próxima
-  //   - Si está en bloque VENCIDOS → su fecha MÁS VENCIDA (la más antigua)
-  // Esto ya viene calculado por la API como proximaVcto / fechaMasVencida.
-  const proximaFechaVcto = cliente.proximaVcto || cliente.fechaMasVencida;
-
-  // Estado legible: "Por vencer" / "Vencido hace Xd"
-  const estadoTexto = cliente.maxDiasAtraso > 0
-    ? `Vencido hace ${cliente.maxDiasAtraso}d`
-    : "Por vencer";
 
   return (
     <Card className={`glass-card p-3 transition-all ${todasNotificadas ? "opacity-50 border-emerald-500/20" : ""}`}>
@@ -349,16 +255,8 @@ function NotifCard({ cliente, onView }: {
             </span>
             <span>·</span>
             <span className={`font-semibold ${diasColor}`}>
-              {estadoTexto}
+              {cliente.maxDiasAtraso > 0 ? `${cliente.maxDiasAtraso}d atraso` : "Por vencer"}
             </span>
-            {proximaFechaVcto && (
-              <>
-                <span>·</span>
-                <span className="text-muted-foreground" title="Próximo vencimiento">
-                  Vcto: {fmtDate(proximaFechaVcto)}
-                </span>
-              </>
-            )}
             {cliente.sucursal && <><span>·</span><span>{cliente.sucursal}</span></>}
             {cliente.ultimaNotificacion && (
               <>
@@ -372,6 +270,11 @@ function NotifCard({ cliente, onView }: {
         </div>
         <div className="text-right shrink-0">
           <p className="text-lg font-bold text-amber-400">{fmtGs(cliente.totalGs)}</p>
+          {cliente.totalInteres > 0 && (
+            <p className="text-[9px] text-orange-400/70">
+              +{fmtGs(cliente.totalInteres)} interés
+            </p>
+          )}
         </div>
         <div className="flex flex-col gap-1 shrink-0">
           <Button variant="ghost" size="sm" onClick={onView} className="h-7 text-xs">
@@ -410,7 +313,386 @@ function NotifCard({ cliente, onView }: {
           }}
         />
       )}
+
+      {/* === FILA SECUNDARIA: CODEUDOR === */}
+      {cliente.codeudor ? (
+        <div className="mt-2 pt-2 border-t border-border/30 flex items-center gap-3 bg-violet-500/5 -mx-3 -mb-3 px-3 pb-3 rounded-b-xl">
+          <div className="w-7 h-7 rounded-full bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0">
+            <User className="w-3.5 h-3.5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <p className="font-medium text-sm truncate">{cliente.codeudor.nombre}</p>
+              <Badge variant="outline" className="text-violet-300 border-violet-500/30 text-[10px]">Codeudor</Badge>
+              {cliente.codeudor.parentesco && (
+                <span className="text-[10px] text-muted-foreground">{cliente.codeudor.parentesco}</span>
+              )}
+            </div>
+            <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+              <Phone className="w-3 h-3" />
+              {fmtPhone(cliente.codeudor.telefono)}
+            </p>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              size="sm" variant="outline"
+              className="h-7 text-xs text-violet-300 border-violet-500/30 hover:bg-violet-500/10"
+              disabled={!cliente.codeudor.telefono}
+              onClick={abrirWhatsappCodeudor}
+            >
+              <Send className="w-3.5 h-3.5 mr-1" />
+              Notificar
+            </Button>
+            <Button
+              size="sm" variant="ghost"
+              className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
+              onClick={onEditCodeudor} title="Editar codeudor"
+            >
+              <Edit2 className="w-3.5 h-3.5 mr-1" />
+              Editar
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-2 pt-2 border-t border-border/30 flex items-center justify-between">
+          <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+            <UserPlus className="w-3 h-3" /> Sin codeudor registrado
+          </p>
+          <Button
+            variant="ghost" size="sm"
+            className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
+            onClick={onEditCodeudor}
+          >
+            <UserPlus className="w-3.5 h-3.5 mr-1" /> Registrar Codeudor
+          </Button>
+        </div>
+      )}
+
+      {/* === FILA TERCIARIA: GARANTES MÚLTIPLES === */}
+      <GarantesSection cliente={cliente} />
     </Card>
+  );
+}
+
+// ============================================================
+// SECCIÓN DE GARANTES MÚLTIPLES
+// ============================================================
+
+function GarantesSection({ cliente }: { cliente: any }) {
+  const qc = useQueryClient();
+  const [showAgregar, setShowAgregar] = useState(false);
+  const [editingGarante, setEditingGarante] = useState<any | null>(null);
+  const [nuevoGarante, setNuevoGarante] = useState({
+    garanteNombre: "",
+    garanteTelefono: "",
+    garanteCi: "",
+    garanteParentesco: "",
+  });
+  const [saving, setSaving] = useState(false);
+
+  const garantes = cliente.garantes || [];
+
+  const agregarGarante = async () => {
+    if (!nuevoGarante.garanteNombre.trim()) {
+      toast.error("El nombre del garante es obligatorio");
+      return;
+    }
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/clientes/${cliente.id}/garantes`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          garanteNombre: nuevoGarante.garanteNombre.trim(),
+          garanteTelefono: nuevoGarante.garanteTelefono.trim(),
+          garanteCi: nuevoGarante.garanteCi.trim(),
+          garanteParentesco: nuevoGarante.garanteParentesco.trim(),
+        }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error || `Error HTTP ${r.status}`);
+      }
+      const data = await r.json();
+      toast.success(data.msg || "Garante agregado");
+      setNuevoGarante({ garanteNombre: "", garanteTelefono: "", garanteCi: "", garanteParentesco: "" });
+      setShowAgregar(false);
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["clientes"] });
+    } catch (e: any) {
+      toast.error(e.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const actualizarGarante = async (garanteId: string, datos: any) => {
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/clientes/${cliente.id}/garantes/${garanteId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(datos),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        throw new Error(err.error || `Error HTTP ${r.status}`);
+      }
+      const data = await r.json();
+      toast.success(data.msg || "Garante actualizado");
+      setEditingGarante(null);
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["clientes"] });
+    } catch (e: any) {
+      toast.error(e.message || "Error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const eliminarGarante = async (garanteId: string, nombre: string) => {
+    if (!confirm(`¿Eliminar el garante ${nombre}?`)) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`/api/clientes/${cliente.id}/garantes/${garanteId}`, { method: "DELETE" });
+      if (!r.ok) throw new Error();
+      toast.success("Garante eliminado");
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["clientes"] });
+    } catch {
+      toast.error("Error al eliminar");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const abrirWhatsappGarante = async (garante: any) => {
+    if (!garante.garanteTelefono) {
+      toast.error("Este garante no tiene teléfono");
+      return;
+    }
+    // Generar mensaje para el garante
+    try {
+      const genRes = await fetch("/api/notificaciones/generar-mensaje", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ modo: "codeudor", cliente }),
+      });
+      if (!genRes.ok) throw new Error("Error al generar mensaje");
+      const { mensaje } = await genRes.json();
+
+      const tel = String(garante.garanteTelefono).replace(/\D/g, "");
+      let phone = tel;
+      if (tel.startsWith("09")) phone = "595" + tel.slice(1);
+      else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
+
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
+      window.open(url, "_blank");
+      toast.success(`Abriendo WhatsApp para ${garante.garanteNombre}`);
+    } catch (e: any) {
+      toast.error(e.message || "Error");
+    }
+  };
+
+  if (garantes.length === 0 && !showAgregar) {
+    return (
+      <div className="mt-2 pt-2 border-t border-border/30 flex items-center justify-between">
+        <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
+          <UserPlus className="w-3 h-3" /> Sin garantes adicionales
+        </p>
+        <Button
+          variant="ghost" size="sm"
+          className="h-7 text-xs text-sky-300 hover:bg-sky-500/10"
+          onClick={() => setShowAgregar(true)}
+        >
+          <UserPlus className="w-3.5 h-3.5 mr-1" /> Agregar Garante
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      {/* Lista de garantes */}
+      {garantes.length > 0 && (
+        <div className="mt-2 pt-2 border-t border-border/30 space-y-1.5">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-[10px] font-semibold text-sky-300 uppercase tracking-wider flex items-center gap-1">
+              <UserPlus className="w-3 h-3" /> Garantes ({garantes.length})
+            </p>
+            <Button
+              variant="ghost" size="sm"
+              className="h-6 text-[11px] text-sky-300 hover:bg-sky-500/10 px-2"
+              onClick={() => setShowAgregar(true)}
+            >
+              <UserPlus className="w-3 h-3 mr-1" /> Agregar
+            </Button>
+          </div>
+          {garantes.map((g: any, idx: number) => (
+            <div key={g.id} className="flex items-center gap-2 p-1.5 rounded-lg bg-sky-500/5 border border-sky-500/15">
+              <div className="w-6 h-6 rounded-full bg-sky-500/20 text-sky-300 flex items-center justify-center shrink-0 text-[10px] font-bold">
+                {idx + 1}
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <p className="font-medium text-xs truncate">{g.garanteNombre}</p>
+                  <Badge variant="outline" className="text-sky-300 border-sky-500/30 text-[9px] py-0">
+                    Garante
+                  </Badge>
+                  {g.garanteParentesco && (
+                    <span className="text-[10px] text-muted-foreground">{g.garanteParentesco}</span>
+                  )}
+                </div>
+                <p className="text-[10px] text-muted-foreground flex items-center gap-1">
+                  <Phone className="w-2.5 h-2.5" />
+                  {g.garanteTelefono ? fmtPhone(g.garanteTelefono) : <span className="text-amber-400">Sin teléfono</span>}
+                  {g.garanteCi && <span className="ml-2">· CI: {g.garanteCi}</span>}
+                </p>
+              </div>
+              <div className="flex items-center gap-0.5 shrink-0">
+                {editingGarante?.id === g.id ? (
+                  <GaranteEditInline
+                    garante={g}
+                    saving={saving}
+                    onGuardar={(datos) => actualizarGarante(g.id, datos)}
+                    onCancelar={() => setEditingGarante(null)}
+                  />
+                ) : (
+                  <>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-6 w-6 p-0 text-sky-300 hover:bg-sky-500/10"
+                      disabled={!g.garanteTelefono}
+                      onClick={() => abrirWhatsappGarante(g)}
+                      title="Notificar por WhatsApp"
+                    >
+                      <Send className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-6 w-6 p-0 text-sky-300 hover:bg-sky-500/10"
+                      onClick={() => setEditingGarante(g)}
+                      title="Editar garante"
+                    >
+                      <Edit2 className="w-3 h-3" />
+                    </Button>
+                    <Button
+                      size="sm" variant="ghost"
+                      className="h-6 w-6 p-0 text-red-400 hover:bg-red-500/10"
+                      disabled={saving}
+                      onClick={() => eliminarGarante(g.id, g.garanteNombre)}
+                      title="Eliminar garante"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Formulario para agregar nuevo garante */}
+      {showAgregar && (
+        <div className="mt-2 pt-2 border-t border-border/30 p-3 rounded-lg bg-sky-500/5 border border-sky-500/20 space-y-2">
+          <p className="text-xs font-semibold text-sky-300 uppercase tracking-wider">Nuevo Garante</p>
+          <Input
+            placeholder="Nombre completo *"
+            value={nuevoGarante.garanteNombre}
+            onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteNombre: e.target.value })}
+          />
+          <div className="grid grid-cols-2 gap-2">
+            <Input
+              placeholder="Teléfono (opcional)"
+              value={nuevoGarante.garanteTelefono}
+              onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteTelefono: e.target.value })}
+            />
+            <Input
+              placeholder="CI (opcional)"
+              value={nuevoGarante.garanteCi}
+              onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteCi: e.target.value })}
+            />
+          </div>
+          <Input
+            placeholder="Parentesco (Esposo/a, Padre, etc.)"
+            value={nuevoGarante.garanteParentesco}
+            onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteParentesco: e.target.value })}
+          />
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowAgregar(false)}>
+              Cancelar
+            </Button>
+            <Button
+              size="sm" className="h-7 text-xs glow-primary"
+              onClick={agregarGarante}
+              disabled={saving || !nuevoGarante.garanteNombre.trim()}
+            >
+              {saving ? "Guardando…" : "💾 Agregar Garante"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
+// ============================================================
+// EDICIÓN INLINE DE GARANTE
+// ============================================================
+function GaranteEditInline({ garante, saving, onGuardar, onCancelar }: {
+  garante: any;
+  saving: boolean;
+  onGuardar: (datos: any) => void;
+  onCancelar: () => void;
+}) {
+  const [form, setForm] = useState({
+    garanteNombre: garante.garanteNombre || "",
+    garanteTelefono: garante.garanteTelefono || "",
+    garanteCi: garante.garanteCi || "",
+    garanteParentesco: garante.garanteParentesco || "",
+  });
+
+  return (
+    <div className="flex flex-col gap-1 w-full p-2 rounded-lg bg-sky-500/10 border border-sky-500/30">
+      <Input
+        className="h-7 text-xs"
+        placeholder="Nombre *"
+        value={form.garanteNombre}
+        onChange={(e) => setForm({ ...form, garanteNombre: e.target.value })}
+      />
+      <div className="grid grid-cols-2 gap-1">
+        <Input
+          className="h-7 text-xs"
+          placeholder="Teléfono"
+          value={form.garanteTelefono}
+          onChange={(e) => setForm({ ...form, garanteTelefono: e.target.value })}
+        />
+        <Input
+          className="h-7 text-xs"
+          placeholder="CI"
+          value={form.garanteCi}
+          onChange={(e) => setForm({ ...form, garanteCi: e.target.value })}
+        />
+      </div>
+      <Input
+        className="h-7 text-xs"
+        placeholder="Parentesco"
+        value={form.garanteParentesco}
+        onChange={(e) => setForm({ ...form, garanteParentesco: e.target.value })}
+      />
+      <div className="flex gap-1">
+        <Button size="sm" variant="outline" className="h-6 text-xs flex-1" onClick={onCancelar}>
+          Cancelar
+        </Button>
+        <Button
+          size="sm" className="h-6 text-xs flex-1 glow-primary"
+          disabled={saving || !form.garanteNombre.trim()}
+          onClick={() => onGuardar(form)}
+        >
+          {saving ? "…" : "💾 Guardar"}
+        </Button>
+      </div>
+    </div>
   );
 }
 
@@ -519,10 +801,23 @@ function CodeudorDialog({ cliente, onClose }: { cliente: any; onClose: () => voi
   });
 
   function seleccionarSugerido(s: any) {
+    // 🛠️ FIX: NO copiar el teléfono si es igual al del titular (probablemente
+    // el usuario seleccionó al titular por error como codeudor). En ese caso,
+    // dejar el teléfono vacío para que el usuario lo cargue manualmente.
+    const telefonoSugerido = s.telefono || "";
+    const telefonoTitular = cliente.telefono || "";
+    const telefonoFinal = (telefonoSugerido && telefonoSugerido !== telefonoTitular)
+      ? telefonoSugerido
+      : "";
+
+    if (telefonoSugerido && telefonoSugerido === telefonoTitular) {
+      toast.warning("El cliente seleccionado tiene el mismo teléfono que el titular. Cargá el teléfono del codeudor manualmente.");
+    }
+
     setForm({
       ...form,
       codeudorNombre: s.entidad,
-      codeudorTelefono: s.telefono || "",
+      codeudorTelefono: telefonoFinal,
       codeudorCi: s.ciEntidad || "",
     });
     setShowBuscar(false);
@@ -693,6 +988,12 @@ function NotifDetalle({ cliente, modo, onClose }: { cliente: any; modo: string; 
             <Row label="Teléfono" value={fmtPhone(modo === "codeudor" ? cliente.codeudor?.telefono : cliente.telefono)} />
             <Row label="Sucursal" value={cliente.sucursal || "—"} />
             <Row label="Total Deuda" value={fmtGs(cliente.totalGs)} highlight />
+            {cliente.totalInteres > 0 && (
+              <>
+                <Row label="Saldo s/ interés" value={fmtGs(cliente.totalSaldoSinInteres)} />
+                <Row label="Interés acum." value={`+${fmtGs(cliente.totalInteres)}`} />
+              </>
+            )}
             <Row label="Máx. Atraso" value={`${cliente.maxDiasAtraso || 0} días`} />
             <Row label="Vendedor" value={cliente.vendedor || "—"} />
           </div>
@@ -713,8 +1014,11 @@ function NotifDetalle({ cliente, modo, onClose }: { cliente: any; modo: string; 
               {cliente.cuotas?.map((q: any) => (
                 <div key={q.id} className="flex justify-between p-2 rounded-lg bg-secondary/40 text-xs">
                   <div>
-                    <p>{fmtGs(q.saldoGs)}</p>
-                    <p className="text-[10px] text-muted-foreground">Vence: {fmtDate(q.fechaVcto)}</p>
+                    <p>{fmtGs(q.saldoTotalGs || q.saldoGs)}</p>
+                    {q.interesGs > 0 && (
+                      <p className="text-[10px] text-orange-400/70">+{fmtGs(q.interesGs)} interés</p>
+                    )}
+                    <p className="text-[10px] text-muted-foreground">Vence: {new Date(q.fechaVcto).toLocaleDateString("es-PY")}</p>
                   </div>
                   <Badge variant={q.diasAtrasado > 0 ? "destructive" : "secondary"} className="text-[10px]">
                     {diasEstado(q.diasAtrasado)}
@@ -877,12 +1181,11 @@ function EditMontoDialog({ cliente, onClose, onSaved }: {
             const cambioInteres = interes !== (q.interesGs || 0);
             const cambio = cambioSaldo || cambioInteres;
 
-            // 🛠️ Usar UTC en ambos lados para no tener off-by-one por zona horaria.
-            const ahora = new Date();
-            const hoyUtc = Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate(), 0, 0, 0, 0);
-            const v = new Date(q.fechaVcto);
-            const vctoUtc = Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), 0, 0, 0, 0);
-            const dias = Math.max(0, Math.floor((hoyUtc - vctoUtc) / (1000 * 60 * 60 * 24)));
+            const hoy = new Date();
+            hoy.setHours(0, 0, 0, 0);
+            const vcto = new Date(q.fechaVcto);
+            vcto.setHours(0, 0, 0, 0);
+            const dias = Math.max(0, Math.floor((hoy.getTime() - vcto.getTime()) / (1000 * 60 * 60 * 24)));
 
             return (
               <div key={q.id} className={`p-2.5 rounded-lg border ${cambio ? "border-amber-500/40 bg-amber-500/5" : "border-border/40 bg-secondary/20"}`}>
@@ -982,540 +1285,5 @@ function EditMontoDialog({ cliente, onClose, onSaved }: {
         </DialogFooter>
       </DialogContent>
     </Dialog>
-  );
-}
-
-// ============================================================
-// TARJETA DE CODEUDOR (pestaña "Codeudores")
-// ============================================================
-// Gestiona los codeudores APARTE de los titulares.
-// Cada tarjeta muestra:
-//   - Nombre del codeudor + teléfono + parentesco
-//   - Titular asociado (nombre y código)
-//   - Total a cobrar (heredado del titular)
-//   - Botones: Ver detalle / Notificar por WhatsApp / Editar
-// ============================================================
-
-function CodeudorCard({ cliente, onView, onEditCodeudor }: {
-  cliente: any;
-  onView: () => void;
-  onEditCodeudor: () => void;
-}) {
-  const qc = useQueryClient();
-  const codeudor = cliente.codeudor;
-
-  // === MODO MANUAL: abrir WhatsApp con mensaje pre-cargado para el codeudor ===
-  // Usa deep link whatsapp:// para abrir la app directo (sin pestaña nueva).
-  // Registra como FALLIDA si el número es inválido o falta.
-  const abrirWhatsappCodeudor = async () => {
-    // === 1) VALIDAR TELÉFONO DEL CODEUDOR ===
-    const telRaw = String(codeudor?.telefono || "").replace(/\D/g, "");
-    let phone = telRaw;
-    if (telRaw.startsWith("09")) phone = "595" + telRaw.slice(1);
-    else if (telRaw.startsWith("9") && telRaw.length === 9) phone = "595" + telRaw;
-
-    const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
-
-    // Si no hay teléfono o es muy corto → registrar como FALLIDA
-    if (!telRaw || telRaw.length < 6) {
-      const motivo = !telRaw ? "Codeudor sin teléfono" : "Número de codeudor demasiado corto";
-      await fetch("/api/notificaciones", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          clienteId: cliente.id,
-          cuotaIds,
-          telefono: codeudor?.telefono || "",
-          mensaje: "(no enviado — " + motivo + ")",
-          tipo: "codeudor",
-          estado: "fallida",
-          respuesta: motivo,
-        }),
-      });
-      toast.error(`No se pudo notificar al codeudor: ${motivo}. Quedó en el historial.`);
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["historial"] });
-      return;
-    }
-
-    try {
-      // 2) Generar mensaje para el codeudor
-      const genRes = await fetch("/api/notificaciones/generar-mensaje", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ modo: "codeudor", cliente }),
-      });
-      if (!genRes.ok) throw new Error("Error al generar mensaje");
-      const { mensaje } = await genRes.json();
-
-      // 3) Abrir WhatsApp directo con deep link (sin pestaña nueva)
-      const link = document.createElement("a");
-      link.href = `whatsapp://send?phone=${phone}&text=${encodeURIComponent(mensaje)}`;
-      link.style.display = "none";
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-
-      // 4) Registrar envío en historial (estado: enviada)
-      await fetch("/api/notificaciones", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          telefono: codeudor.telefono,
-          mensaje,
-          clienteId: cliente.id,
-          cuotaIds,
-          tipo: "codeudor",
-          estado: "enviada",
-        }),
-      });
-
-      toast.success(`Abriendo WhatsApp para ${codeudor.nombre}`);
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["historial"] });
-    } catch (e: any) {
-      toast.error(e.message || "Error al abrir WhatsApp");
-    }
-  };
-
-  const sinTelefono = !codeudor?.telefono;
-
-  // "Vcto:" de la tarjeta:
-  //   - Si está en bloque POR VENCER → su cuota por vencer más próxima
-  //   - Si está en bloque VENCIDOS → su fecha MÁS VENCIDA (la más antigua)
-  const proximaFechaVcto = cliente.proximaVcto || cliente.fechaMasVencida;
-  const diasColor =
-    cliente.maxDiasAtraso > 60 ? "text-red-400" :
-    cliente.maxDiasAtraso > 30 ? "text-orange-400" :
-    cliente.maxDiasAtraso > 0 ? "text-amber-400" : "text-emerald-400";
-  const estadoTexto = cliente.maxDiasAtraso > 0
-    ? `Vencido hace ${cliente.maxDiasAtraso}d`
-    : "Por vencer";
-
-  return (
-    <Card className="glass-card p-3 transition-all border-violet-500/20">
-      <div className="flex items-center gap-3">
-        {/* Avatar del codeudor */}
-        <div className="w-10 h-10 rounded-full bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0">
-          <User className="w-5 h-5" />
-        </div>
-
-        <div className="flex-1 min-w-0">
-          {/* Nombre del codeudor + badge */}
-          <div className="flex items-center gap-2 mb-1 flex-wrap">
-            <p className="font-semibold truncate">{codeudor?.nombre || "Sin nombre"}</p>
-            <Badge variant="outline" className="text-violet-300 border-violet-500/30 text-[10px]">
-              Codeudor
-            </Badge>
-            {codeudor?.parentesco && (
-              <span className="text-[10px] text-muted-foreground">{codeudor.parentesco}</span>
-            )}
-          </div>
-
-          {/* Teléfono del codeudor */}
-          <p className="text-xs text-muted-foreground flex items-center gap-1 mb-1">
-            <Phone className="w-3 h-3" />
-            {sinTelefono
-              ? <span className="text-amber-400">Sin teléfono</span>
-              : fmtPhone(codeudor.telefono)}
-          </p>
-
-          {/* Titular asociado */}
-          <div className="flex items-center gap-2 text-[11px] text-muted-foreground flex-wrap">
-            <span>Titular:</span>
-            <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
-              #{cliente.codigoEntidad}
-            </Badge>
-            <span className="font-medium text-foreground/80 truncate">{cliente.entidad}</span>
-            <span>·</span>
-            <span className={`font-semibold ${diasColor}`}>{estadoTexto}</span>
-            {proximaFechaVcto && (
-              <>
-                <span>·</span>
-                <span>Vcto: {fmtDate(proximaFechaVcto)}</span>
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Total a cobrar (heredado del titular) */}
-        <div className="text-right shrink-0">
-          <p className="text-sm font-bold text-amber-400">{fmtGs(cliente.totalGs)}</p>
-          {cliente.totalInteres > 0 && (
-            <p className="text-[9px] text-orange-400/70">
-              +{fmtGs(cliente.totalInteres)} interés
-            </p>
-          )}
-        </div>
-
-        {/* Botones de acción */}
-        <div className="flex flex-col gap-1 shrink-0">
-          <Button variant="ghost" size="sm" onClick={onView} className="h-7 text-xs">
-            <Eye className="w-3.5 h-3.5 mr-1" /> Ver
-          </Button>
-          <Button
-            size="sm" variant="outline"
-            className="h-7 text-xs text-violet-300 border-violet-500/30 hover:bg-violet-500/10"
-            disabled={sinTelefono}
-            onClick={abrirWhatsappCodeudor}
-          >
-            <Send className="w-3.5 h-3.5 mr-1" />
-            Notificar
-          </Button>
-          <Button
-            size="sm" variant="ghost"
-            className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
-            onClick={onEditCodeudor}
-            title="Editar codeudor"
-          >
-            <Edit2 className="w-3.5 h-3.5 mr-1" />
-            Editar
-          </Button>
-        </div>
-      </div>
-    </Card>
-  );
-}
-
-// ============================================================
-// DIALOG: NUEVO CODEUDOR (buscar titular + registrar codeudor)
-// ============================================================
-// Flujo:
-//   1. Buscar y seleccionar el cliente titular
-//   2. Llenar los datos del codeudor (nombre, teléfono, CI, parentesco)
-//   3. Guardar con PUT /api/clientes/{titularId}/codeudor
-// ============================================================
-
-function NuevoCodeudorDialog({ onClose, onCreado }: {
-  onClose: () => void;
-  onCreado: () => void;
-}) {
-  const qc = useQueryClient();
-  const [paso, setPaso] = useState<1 | 2>(1);
-  const [titularSeleccionado, setTitularSeleccionado] = useState<any | null>(null);
-  const [busqueda, setBusqueda] = useState("");
-  const [form, setForm] = useState({
-    codeudorNombre: "",
-    codeudorTelefono: "",
-    codeudorCi: "",
-    codeudorParentesco: "",
-  });
-  const [saving, setSaving] = useState(false);
-
-  // Buscar clientes existentes para vincular como titular
-  const { data: sugeridos, isFetching: buscando } = useQuery({
-    queryKey: ["buscar-titular", busqueda],
-    queryFn: async () => {
-      if (busqueda.length < 2) return { clientes: [] };
-      const r = await fetch(`/api/clientes/buscar?q=${encodeURIComponent(busqueda)}`);
-      if (!r.ok) throw new Error();
-      return r.json();
-    },
-    enabled: busqueda.length >= 2,
-  });
-
-  function seleccionarTitular(s: any) {
-    setTitularSeleccionado(s);
-    setBusqueda("");
-    setPaso(2);
-  }
-
-  async function guardar() {
-    const nombreTrim = (form.codeudorNombre || "").trim();
-    if (!nombreTrim) {
-      toast.error("El nombre del codeudor es obligatorio");
-      return;
-    }
-    if (!titularSeleccionado?.id) {
-      toast.error("Tenés que seleccionar un titular primero");
-      return;
-    }
-    setSaving(true);
-    try {
-      const payload = {
-        codeudorNombre: nombreTrim,
-        codeudorTelefono: (form.codeudorTelefono || "").trim(),
-        codeudorCi: (form.codeudorCi || "").trim(),
-        codeudorParentesco: (form.codeudorParentesco || "").trim(),
-      };
-      const r = await fetch(`/api/clientes/${titularSeleccionado.id}/codeudor`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!r.ok) {
-        const errText = await r.text();
-        let errMsg = `Error HTTP ${r.status}`;
-        try {
-          const errData = JSON.parse(errText);
-          errMsg = errData.error || errMsg;
-        } catch {}
-        throw new Error(errMsg);
-      }
-      const data = await r.json();
-      toast.success(data?.msg || "Codeudor registrado correctamente");
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["clientes"] });
-      onCreado();
-    } catch (e: any) {
-      toast.error(e.message || "Error al guardar el codeudor");
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle className="flex items-center gap-2">
-            <UserPlus className="w-4 h-4 text-violet-400" />
-            Registrar Nuevo Codeudor
-          </DialogTitle>
-          <p className="text-xs text-muted-foreground">
-            Paso {paso} de 2 · {paso === 1 ? "Buscar titular" : "Datos del codeudor"}
-          </p>
-        </DialogHeader>
-
-        {/* Indicador de pasos */}
-        <div className="flex gap-1 mb-2">
-          <div className={`flex-1 h-1 rounded-full ${paso >= 1 ? "bg-violet-500" : "bg-secondary"}`} />
-          <div className={`flex-1 h-1 rounded-full ${paso >= 2 ? "bg-violet-500" : "bg-secondary"}`} />
-        </div>
-
-        {paso === 1 && (
-          <div className="space-y-3">
-            <div>
-              <Label className="text-xs">Buscar titular (cliente) al que se vinculará el codeudor</Label>
-              <Input
-                placeholder="Nombre, código, CI o teléfono…"
-                value={busqueda}
-                onChange={(e) => setBusqueda(e.target.value)}
-                autoFocus
-              />
-              <p className="text-[10px] text-muted-foreground mt-1">Escribí al menos 2 caracteres</p>
-            </div>
-
-            {/* Resultados de búsqueda */}
-            <div className="max-h-72 overflow-y-auto space-y-1 border border-border/40 rounded-lg p-1">
-              {busqueda.length < 2 && (
-                <p className="text-xs text-muted-foreground text-center py-4">Empezá a escribir para buscar</p>
-              )}
-              {busqueda.length >= 2 && buscando && (
-                <p className="text-xs text-muted-foreground text-center py-4">Buscando…</p>
-              )}
-              {busqueda.length >= 2 && !buscando && sugeridos?.clientes?.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">Sin resultados</p>
-              )}
-              {sugeridos?.clientes?.map((s: any) => (
-                <button
-                  key={s.id}
-                  type="button"
-                  onClick={() => seleccionarTitular(s)}
-                  className="w-full text-left p-2 rounded hover:bg-secondary/60 text-xs"
-                >
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary shrink-0">
-                      #{s.codigoEntidad}
-                    </Badge>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{s.entidad}</p>
-                      <p className="text-[10px] text-muted-foreground">
-                        {fmtPhone(s.telefono)} · {s.localidad || "—"}
-                      </p>
-                    </div>
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={onClose}>Cancelar</Button>
-            </DialogFooter>
-          </div>
-        )}
-
-        {paso === 2 && titularSeleccionado && (
-          <div className="space-y-3">
-            {/* Titular seleccionado */}
-            <div className="p-2 rounded-lg bg-primary/5 border border-primary/20">
-              <p className="text-[10px] text-muted-foreground uppercase">Titular seleccionado</p>
-              <div className="flex items-center gap-2 mt-1">
-                <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 border-primary/30 text-primary">
-                  #{titularSeleccionado.codigoEntidad}
-                </Badge>
-                <p className="text-sm font-medium truncate">{titularSeleccionado.entidad}</p>
-              </div>
-              <p className="text-[10px] text-muted-foreground mt-1">
-                {fmtPhone(titularSeleccionado.telefono)} · {titularSeleccionado.localidad || "—"}
-              </p>
-              <button
-                type="button"
-                onClick={() => { setPaso(1); setTitularSeleccionado(null); }}
-                className="text-[10px] text-violet-400 hover:underline mt-1"
-              >
-                ← Cambiar titular
-              </button>
-            </div>
-
-            {/* Datos del codeudor */}
-            <div className="space-y-3 border-t border-border/30 pt-3">
-              <div>
-                <Label className="text-xs">Nombre del codeudor *</Label>
-                <Input
-                  value={form.codeudorNombre}
-                  onChange={(e) => setForm({ ...form, codeudorNombre: e.target.value })}
-                  placeholder="Ej: JUAN PEREZ"
-                  autoFocus
-                />
-              </div>
-              <div>
-                <Label className="text-xs">Teléfono (opcional)</Label>
-                <Input
-                  value={form.codeudorTelefono}
-                  onChange={(e) => setForm({ ...form, codeudorTelefono: e.target.value })}
-                  placeholder="0981123456 — podés dejar vacío"
-                />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label className="text-xs">CI</Label>
-                  <Input
-                    value={form.codeudorCi}
-                    onChange={(e) => setForm({ ...form, codeudorCi: e.target.value })}
-                    placeholder="1234567"
-                  />
-                </div>
-                <div>
-                  <Label className="text-xs">Parentesco</Label>
-                  <Input
-                    value={form.codeudorParentesco}
-                    onChange={(e) => setForm({ ...form, codeudorParentesco: e.target.value })}
-                    placeholder="Esposo/a, Padre…"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setPaso(1)}>← Atrás</Button>
-              <Button
-                onClick={guardar}
-                disabled={saving || !form.codeudorNombre.trim()}
-                className="bg-violet-500 hover:bg-violet-600 text-white"
-              >
-                {saving ? "Guardando…" : "💾 Registrar Codeudor"}
-              </Button>
-            </DialogFooter>
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-// ============================================================
-// PANEL DE AUTOMATIZACIÓN
-// (movido desde la pestaña "Automatización" de Configuración
-//  para acceso rápido desde Notificaciones)
-// ============================================================
-
-function AutomatizacionPanel() {
-  const qc = useQueryClient();
-  const { data, isLoading } = useQuery({
-    queryKey: ["config"],
-    queryFn: async () => {
-      const r = await fetch("/api/config");
-      if (!r.ok) throw new Error();
-      return r.json();
-    },
-  });
-  const config = data?.config;
-  const [form, setForm] = useState<any>(null);
-  const [open, setOpen] = useState(false);
-
-  useEffect(() => { if (config && !form) setForm(config); }, [config, form]);
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const r = await fetch("/api/config", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          autoNotificar: form.autoNotificar,
-          autoDetectarCompromisos: form.autoDetectarCompromisos,
-        }),
-      });
-      if (!r.ok) throw new Error();
-      return r.json();
-    },
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["config"] });
-      toast.success("Automatización guardada");
-    },
-    onError: () => toast.error("Error al guardar"),
-  });
-
-  if (isLoading || !form) return null;
-
-  // Resumen compacto (siempre visible)
-  const resumen: string[] = [];
-  if (form.autoNotificar) resumen.push("Notif. auto ON");
-  if (form.autoDetectarCompromisos) resumen.push("Detección compromisos ON");
-  if (resumen.length === 0) resumen.push("Sin automatizaciones activas");
-
-  return (
-    <Card className="glass-card">
-      <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <Bot className="w-4 h-4 text-primary" />
-            Automatización
-          </CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 text-xs"
-            onClick={() => setOpen((v) => !v)}
-          >
-            {open ? "Cerrar" : "Configurar"}
-          </Button>
-        </div>
-        {!open && (
-          <p className="text-[11px] text-muted-foreground mt-1">
-            {resumen.join(" · ")}
-          </p>
-        )}
-      </CardHeader>
-      {open && (
-        <CardContent className="space-y-3 pt-2">
-          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-            <div className="flex-1 min-w-0 pr-2">
-              <p className="font-medium text-sm flex items-center gap-1.5">
-                <Bell className="w-3.5 h-3.5 text-primary" />
-                Notificaciones automáticas
-              </p>
-              <p className="text-xs text-muted-foreground">Enviar WhatsApp automáticamente según reglas (cron diario)</p>
-            </div>
-            <Switch checked={!!form.autoNotificar} onCheckedChange={(v) => setForm({ ...form, autoNotificar: v })} />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-            <div className="flex-1 min-w-0 pr-2">
-              <p className="font-medium text-sm flex items-center gap-1.5">
-                <Brain className="w-3.5 h-3.5 text-primary" />
-                Detección automática de compromisos
-              </p>
-              <p className="text-xs text-muted-foreground">IA analiza conversaciones entrantes y detecta promesas de pago</p>
-            </div>
-            <Switch checked={!!form.autoDetectarCompromisos} onCheckedChange={(v) => setForm({ ...form, autoDetectarCompromisos: v })} />
-          </div>
-          <Button
-            onClick={() => save.mutate()}
-            disabled={save.isPending}
-            className="glow-primary"
-            size="sm"
-          >
-            <Save className="w-3.5 h-3.5 mr-1" /> {save.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </CardContent>
-      )}
-    </Card>
   );
 }

@@ -1,87 +1,65 @@
-# 🎯 FIX: Persistencia al importar + Reporte Exclusiones INFORCONF
+# 🎯 FIX: WhatsApp del Codeudor usa SU teléfono (no el del titular)
 
-## ⭐ Qué se arregló (con cuidado de no perder datos)
+## ⭐ El bug
+Cuando apretabas "Notificar" en el codeudor, el mensaje se abría en WhatsApp con
+el número del **titular**, no con el número del codeudor que cargaste.
 
-### 1. Teléfonos, codeudores e INFORCONF persisten al re-importar
+## 🔍 La causa
+2 problemas combinados:
 
-**Antes**: cada vez que importabas el Excel, los campos se sobrescribían. Si el
-Excel traía teléfono vacío o INFORCONF="N", **se borraba** el teléfono editado
-manualmente y se perdía la marca INFORCONF.
+1. **Al seleccionar un cliente sugerido como codeudor**, el código copiaba su
+   teléfono automáticamente. Si el usuario seleccionaba al titular (o un cliente
+   con el mismo teléfono), el codeudor quedaba con el teléfono del titular.
 
-**Ahora**:
-- **Teléfono / Teléfono alternativo**: solo se sobrescriben si el Excel los trae
-  con un valor real (no vacío). Si el Excel los trae vacíos, **se conserva** lo
-  que ya estaba guardado.
-- **INFORCONF / Judicial**: solo se marcan "S" si el Excel los trae como "S".
-  Si el Excel los trae como "N" o vacío, **NO se sobrescribe** → preserva la
-  marca manual que hiciste en el sistema.
-- **Codeudores** (codeudorNombre, codeudorTelefono, etc.): no se tocan al
-  importar (ya venían así, confirmado).
-- **Saldo, fechaVcto, etc.**: estos SÍ se actualizan con cada importación (es
-  la info financiera que cambia).
+2. **`abrirWhatsappCodeudor` no validaba** que el teléfono del codeudor sea
+   distinto al del titular. Si eran iguales, abría WhatsApp con ese número
+   (que era el del titular).
 
-Resultado: si editás un teléfono o marcás INFORCONF="S" en el sistema, **queda
-guardado** aunque re-importes el Excel.
+## 🛠️ La solución (sin tocar nada más)
 
-### 2. Codeudores en Notificaciones siguen figurando igual
-No se modificó la API de notificaciones — los codeudores siguen apareciendo
-igual que antes. Solo se actualiza el saldo conforme a la importación.
+### 1. `abrirWhatsappCodeudor` — Validación de seguridad
+- Usa SIEMPRE `cliente.codeudor.telefono` (no fallback al titular)
+- Si el codeudor no tiene teléfono → avisa y NO abre WhatsApp
+- **Si el teléfono del codeudor es igual al del titular** → avisa y NO abre WhatsApp:
+  > "El teléfono del codeudor es igual al del titular. Editá el codeudor con su número correcto."
+- El toast de éxito ahora muestra el número: `"Abriendo WhatsApp para SANGALLI (595986674686)"`
 
-### 3. Reporte de Exclusiones de Morosidades INFORCONF
+### 2. `seleccionarSugerido` — No copiar teléfono si es igual al del titular
+- Al seleccionar un cliente sugerido como codeudor, si su teléfono es igual al
+  del titular, NO se copia (queda vacío para que el usuario lo cargue manualmente)
+- Avisa con toast: "El cliente seleccionado tiene el mismo teléfono que el titular. Cargá el teléfono del codeudor manualmente."
 
-Nuevo panel amarillo **abajo del titular** en la pestaña Clientes (arriba de la
-tabla) que muestra:
-- **Titulares con INFORCONF="S" sin deuda activa** (la deuda fue paga o no vino
-  en el Excel)
-- **Codeudores de titulares marcados INFORCONF="S"** (para que también les
-  saques el flag)
-
-Botón **"Exportar PDF / Imprimir"** que abre un reporte limpio con:
-- Encabezado "⚠ EXCLUSIONES DE MOROSIDADES — INFORCONF"
-- Resumen con totales
-- Tabla de titulares (#, Código, Cliente, CI, Teléfono, Localidad, Sucursal,
-  Vendedor, Judicial, Últ. Notif.)
-- Tabla de codeudores (#, Cód. Titular, Titular, Codeudor, Teléfono, CI
-  Codeudor, Parentesco, Sucursal, Titular sin deuda)
-- Diálogo de impresión automático → podés **Guardar como PDF** o **Imprimir**
-
----
-
-## 📦 Archivos incluidos (3)
-
-| Archivo | Qué cambia |
-|---|---|
-| `src/app/api/import/route.ts` | ⭐ NO sobrescribe telefono/informconf/judicial con valores vacíos del Excel |
-| `src/app/api/inforconf/exclusiones/route.ts` | ⭐ NUEVO: reporte de exclusiones (titulares + codeudores) |
-| `src/components/modules/clientes.tsx` | ⭐ Panel amarillo con botón Exportar PDF |
+## 📦 Solo 1 archivo
+- `src/components/modules/notificaciones.tsx`
 
 ## 🔧 Cómo aplicar
-
-1. Abrí la carpeta del repo: `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
-2. Copiá la carpeta `src` de este ZIP y **reemplazá** la existente (sobrescribe 2 archivos + agrega 1 nuevo)
-3. GitHub Desktop → commit (ej: "persistencia al importar + reporte exclusiones") → **Push**
-4. Esperá 2-3 min el redeploy de Vercel
+1. Copiar `src/components/modules/notificaciones.tsx` del ZIP → reemplazar el del repo
+2. GitHub Desktop → commit (ej: "fix whatsapp codeudor usa su telefono") → **Push**
+3. Esperar 2-3 min el deploy
 
 ## ⚠️ No hace falta ejecutar nada en consola
-Este fix no requiere comandos fetch. Funciona automáticamente después del deploy.
 
 ## 🧪 Después probá
 
-### Persistencia:
-1. Editá el teléfono de un titular en **Clientes** (botón Editar)
-2. Marcá INFORCONF="S" en algún cliente
-3. Re-importá el Excel (desde **Configuración → Importar Datos**)
-4. Volvé a **Clientes** → el teléfono editado y el INFORCONF="S" siguen ahí ✓
+### Caso 1: Codeudor con teléfono distinto al titular
+1. Editá el codeudor → cargá un número DISTINTO al del titular → Guardar
+2. Apretá "Notificar" en el codeudor
+3. WhatsApp se abre con el número del CODEUDOR ✓
+4. El toast dice: "Abriendo WhatsApp para SANGALLI (595XXXXXXXX)"
 
-### Reporte exclusiones:
-1. Andá a **Clientes**
-2. Si hay clientes con INFORCONF="S" sin deuda, vas a ver el panel amarillo arriba:
-   > "⚠ Exclusiones INFORCONF: X titular(es) + Y codeudor(es)"
-3. Apretá **"Exportar PDF / Imprimir"** → se abre el reporte → elegís Guardar como PDF o Imprimir
+### Caso 2: Codeudor con teléfono igual al titular (bug actual de SANGALLI)
+1. Apretá "Notificar" en el codeudor SANGALLI (que tiene el mismo teléfono que BOGARIN)
+2. Aparece toast: "El teléfono del codeudor es igual al del titular. Editá el codeudor con su número correcto."
+3. NO se abre WhatsApp → tenés que editar el codeudor y poner el número correcto
 
-## 📝 Nota importante
-- Los codeudores en Notificaciones **siguen figurando igual** que antes (no se tocó esa API)
-- Solo se actualiza el saldo y la fechaVcto cuando re-importás (eso es lo que cambia del Excel)
-- Los INFORCONF="S" sin deuda aparecen en el reporte para que puedas quitarles el flag manualmente
+### Caso 3: Seleccionar cliente sugerido con mismo teléfono
+1. Al buscar un cliente para agregar como codeudor, si tiene el mismo teléfono que el titular
+2. El teléfono NO se autocompleta → queda vacío
+3. Toast de advertencia → cargás el teléfono manualmente
 
-✅ TypeScript: 0 errores en los 3 archivos.
+## ✅ Conservado intacto
+- El WhatsApp del TITULAR sigue funcionando igual (usa `cliente.telefono`)
+- Los codeudores en Notificaciones siguen figurando igual
+- El resto del sistema no se tocó
+
+✅ TypeScript: 0 errores.
