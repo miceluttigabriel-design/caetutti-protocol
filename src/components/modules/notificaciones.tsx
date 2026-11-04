@@ -234,10 +234,23 @@ function NotifCard({ cliente, onView }: {
   const [showEditMonto, setShowEditMonto] = useState(false);
 
   // === MODO MANUAL: abrir WhatsApp con mensaje pre-cargado ===
-  // Genera el mensaje y abre wa.me con el texto pre-cargado
+  // Genera el mensaje y abre wa.me con el texto pre-cargado DIRECTAMENTE.
+  // Truco anti-popup-blocker: abrimos la ventana vacía SYNC (conserva el gesto del
+  // usuario), y después la redirigimos a wa.me cuando ya tenemos el mensaje.
   const abrirWhatsappCliente = async () => {
+    // 1) Abrir ventana vacía AHORA (sync) — preserva el gesto del click.
+    //    Si no lo hacemos acá, el navegador bloquea el popup por ser post-await.
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      toast.error("El navegador bloqueó la ventana. Permití pop-ups para este sitio.");
+      return;
+    }
+    popup.document.write('<html><head><title>Abriendo WhatsApp…</title></head>' +
+      '<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#00ff41;font-size:14px;">' +
+      'Abriendo WhatsApp…</body></html>');
+
     try {
-      // Generar mensaje
+      // 2) Generar el mensaje
       const genRes = await fetch("/api/notificaciones/generar-mensaje", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ modo: "cliente", cliente }),
@@ -245,29 +258,32 @@ function NotifCard({ cliente, onView }: {
       if (!genRes.ok) throw new Error("Error al generar mensaje");
       const { mensaje } = await genRes.json();
 
-      // Normalizar teléfono: 0986101358 → 595986101358
+      // 3) Normalizar teléfono: 0986101358 → 595986101358
       const tel = String(cliente.telefono || "").replace(/\D/g, "");
       let phone = tel;
       if (tel.startsWith("09")) phone = "595" + tel.slice(1);
       else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
 
-      // Marcar cuotas como notificadas en la DB
+      // 4) Redirigir la ventana ya abierta a wa.me — abre WhatsApp directamente
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
+      popup.location.href = url;
+
+      // 5) Marcar cuotas como notificadas en DB (en background, sin esperar)
       const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
-      await fetch("/api/whatsapp/send", {
+      fetch("/api/whatsapp/send", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           telefono: cliente.telefono, mensaje, clienteId: cliente.id, cuotaIds,
           modoManual: true,  // no envía por API, solo marca en DB
         }),
-      });
+      }).catch(() => {});
 
-      // Abrir WhatsApp con mensaje pre-cargado
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
-      window.open(url, "_blank");
       toast.success(`Abriendo WhatsApp para ${cliente.entidad}`);
       qc.invalidateQueries({ queryKey: ["notifs"] });
     } catch (e: any) {
-      toast.error(e.message || "Error");
+      // Si falla, cerrar la ventana vacía
+      try { popup.close(); } catch {}
+      toast.error(e.message || "Error al abrir WhatsApp");
     }
   };
 
@@ -982,12 +998,23 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
   const codeudor = cliente.codeudor;
 
   // === MODO MANUAL: abrir WhatsApp con mensaje pre-cargado para el codeudor ===
+  // Truco anti-popup-blocker: ventana abierta SYNC, redirigida después del await.
   const abrirWhatsappCodeudor = async () => {
+    if (!codeudor?.telefono) {
+      toast.error("El codeudor no tiene teléfono");
+      return;
+    }
+    // Abrir ventana vacía AHORA (sync) para preservar el gesto del click.
+    const popup = window.open("", "_blank");
+    if (!popup) {
+      toast.error("El navegador bloqueó la ventana. Permití pop-ups para este sitio.");
+      return;
+    }
+    popup.document.write('<html><head><title>Abriendo WhatsApp…</title></head>' +
+      '<body style="font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;background:#0a0a0a;color:#00ff41;font-size:14px;">' +
+      'Abriendo WhatsApp…</body></html>');
+
     try {
-      if (!codeudor?.telefono) {
-        toast.error("El codeudor no tiene teléfono");
-        return;
-      }
       // Generar mensaje para el codeudor
       const genRes = await fetch("/api/notificaciones/generar-mensaje", {
         method: "POST", headers: { "Content-Type": "application/json" },
@@ -1002,9 +1029,13 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
       if (tel.startsWith("09")) phone = "595" + tel.slice(1);
       else if (tel.startsWith("9") && tel.length === 9) phone = "595" + tel;
 
-      // Marcar cuotas del TITULAR como notificadas en la DB (no del codeudor)
+      // Redirigir la ventana ya abierta a wa.me — abre WhatsApp directamente
+      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
+      popup.location.href = url;
+
+      // Marcar cuotas en DB (en background, sin esperar)
       const cuotaIds = cliente.cuotas?.map((q: any) => q.id) || [];
-      await fetch("/api/whatsapp/send", {
+      fetch("/api/whatsapp/send", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           telefono: codeudor.telefono,
@@ -1014,15 +1045,13 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
           modoManual: true,
           esCodeudorGarante: true,  // NO marca cuotas del titular como notificadas
         }),
-      });
+      }).catch(() => {});
 
-      // Abrir WhatsApp con mensaje pre-cargado
-      const url = `https://wa.me/${phone}?text=${encodeURIComponent(mensaje)}`;
-      window.open(url, "_blank");
       toast.success(`Abriendo WhatsApp para ${codeudor.nombre}`);
       qc.invalidateQueries({ queryKey: ["notifs"] });
     } catch (e: any) {
-      toast.error(e.message || "Error");
+      try { popup.close(); } catch {}
+      toast.error(e.message || "Error al abrir WhatsApp");
     }
   };
 
