@@ -119,7 +119,7 @@ export function DashboardShell() {
 function renderPage(page: PageKey, sucursal: string) {
   switch (page) {
     case "dashboard": return <DashboardPage sucursal={sucursal} />;
-    case "clientes": return <ClientesModule />;
+    case "clientes": return <ClientesModule sucursal={sucursal} />;
     case "cuotas": return <CuotasModule />;
     case "notificaciones": return <NotificacionesModule sucursal={sucursal} />;
     case "comunicaciones": return <ComunicacionesModule />;

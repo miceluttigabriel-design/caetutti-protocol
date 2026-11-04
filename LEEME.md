@@ -1,66 +1,57 @@
-# 🤝 Codeudor como entidad + Filtro por sucursal en Clientes
+# 🎯 FIX ÚNICO: Sucursal Global + Pestañas + Zona Peligrosa
 
-## ¿Qué cambia este patch?
+## Qué hace este patch (todo en uno)
 
-### 1) ❌ Quitar botón "Nuevo Cliente" de la pestaña Clientes
-- Ya no vas a ver el botón **+ Nuevo Cliente** arriba a la derecha en Clientes.
-- Los clientes se crean de dos formas: por **importación de Excel** (los titulares) y **automáticamente al registrar un codeudor** desde Notificaciones.
-- La edición de cliente (lápiz) sigue funcionando igual.
+### 1️⃣ Sucursal GLOBAL para Clientes (lo nuevo)
+- **ELIMINADO** el selector de sucursal que estaba dentro de la pestaña Clientes
+  (el que estaba al lado del buscador). Ya no existe.
+- Ahora la pestaña **Clientes se filtra con el selector de la barra superior**
+  (el de al lado de "Administrador", con el 📍 MapPin) — **el mismo que usa el Dashboard**.
+- Al elegir una sucursal arriba → Clientes muestra SOLO los clientes de esa sucursal
+  (stats, lista y paginación incluidos). "Todas las sucursales" = ves todo.
+- La sucursal elegida se recuerda aunque cierres sesión (ya lo hacía el sistema).
 
-### 2) 🤝 Codeudor se registra como entidad Cliente automáticamente
-- Cuando registrás un codeudor en **Notificaciones → Codeudores → Registrar Codeudor**,
-  además de guardar los datos en el titular, **se crea un nuevo registro en la tabla Cliente**
-  con `codigoEntidad = "GAR-{codigoTitular}"` (ej: si el titular es `001234`, el codeudor queda como `GAR-001234`).
-- El codeudor hereda la sucursal, vendedor y cobrador del titular.
-- Vas a verlo en la pestaña **Clientes** como una entidad más.
-- Si ya existe un codeudor con ese código (porque lo registraste antes), se **actualizan** sus datos.
-- Si eliminás el codeudor desde el titular, también se elimina la entidad creada.
+### 2️⃣ Notificaciones por sucursal (verificado)
+- La pestaña Notificaciones **YA usaba** el selector global de arriba: los clientes
+  a notificar (titulares y codeudores) se filtran por la sucursal elegida arriba.
+- No necesitaba cambios: confirmado en el código (`/api/notificaciones?sucursal=...`).
 
-### 3) 🏢 Filtro por sucursal en la pestaña Clientes
-- Arriba, al lado del buscador, ahora hay un selector **"Todas las sucursales"**.
-- Al elegir una sucursal, la tabla, las tarjetas de estadísticas y el paginador se recalculan
-  sobre los clientes de esa sucursal.
-- Elegí "Todas las sucursales" para ver todo igual que antes.
+### 3️⃣ Notificaciones automáticas → van DENTRO de Notificaciones
+- Se quitó la pestaña "Automatización" de Configuraciones.
+- Ahora en la parte de **arriba de Notificaciones** hay un panel colapsable
+  "🤖 Automatización" con:
+  - Resumen al instante: `Notif. auto ON · Detección compromisos ON` o "Sin automatizaciones activas"
+  - Botón "Configurar" → muestra los 2 switches:
+    - Notificaciones automáticas
+    - Detección automática de compromisos
+  - Guardado directo.
+
+### 4️⃣ Zona Peligrosa → ahora está en General (Configuraciones)
+- La tarjeta roja "🗑️ Zona Peligrosa — Borrar TODAS las deudas" quedó dentro de la
+  pestaña **General** de Configuraciones, abajo de "Contraseña y Cooldown".
+- Sigue pidiendo confirmación en 2 pasos. Los clientes SIEMPRE se preservan.
+
+### 5️⃣ Pestaña "Automatización" ELIMINADA de Configuraciones
+- Configuraciones queda con 5 pestañas: General, WhatsApp, Uso y Límites, Plantillas, IA.
 
 ---
 
-## 📦 Instalación (igual que siempre)
+## 📁 Archivos incluidos (4)
 
-1. Descomprimí `fix-codeudor-sucursal.zip`
-2. Copiá las carpetas `src/` dentro de la raíz del repo
-   `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
-   (se reemplazan 2 archivos)
-3. En GitHub Desktop → commit (ej: "🤝 Codeudor como entidad + filtro sucursal") → **Push origin**
-4. Esperá 2–3 minutos al redeploy de Vercel
+| Archivo | Qué cambia |
+|---|---|
+| `src/components/modules/clientes.tsx` | Sin selector interno · filtra por sucursal global |
+| `src/components/dashboard/shell.tsx` | Le pasa la sucursal global a Clientes |
+| `src/components/modules/notificaciones.tsx` | Panel de Automatización arriba |
+| `src/components/modules/configuracion.tsx` | Sin pestaña Automatización · Zona Peligrosa en General |
 
-## ✅ Cómo probar
+## 🔧 Cómo aplicar
 
-### Codeudor → entidad:
-1. Andá a **Notificaciones → pestaña Codeudores → Registrar Codeudor**
-2. Buscá un titular, completá nombre/teléfono/CI/parentesco → **💾 Registrar Codeudor**
-3. Andá a **Clientes** y buscá por el nombre del codeudor (o por `GAR-` para ver todos)
-4. Debería aparecer como entidad propia con su teléfono, su sucursal, etc.
+1. Abrí la carpeta del repo: `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
+2. Copiá la carpeta `src` de este ZIP y **reemplazá** la existente
+   (sobrescriben 4 archivos, no borra nada más).
+3. GitHub Desktop → commit (ej: "sucursal global + pestanas fix") → **Push**.
+4. Esperá 2-3 min el redeploy de Vercel.
 
-### Filtro por sucursal:
-1. En **Clientes**, abrí el selector de sucursales (arriba, a la derecha del buscador)
-2. Elegí una sucursal → la tabla muestra solo los clientes de esa sucursal
-3. Las tarjetas de Total / Con teléfono / Sin teléfono / Judicial se recalculan sobre esa sucursal
-4. Volvé a "Todas las sucursales" para ver todo
-
-### Botón Nuevo Cliente eliminado:
-- En **Clientes** ya NO debe aparecer el botón verde **+ Nuevo Cliente**.
-- Solo quedan el buscador + el selector de sucursal + indicador "actualizando…".
-
-## 🔧 Detalle técnico (por si te interesa)
-
-El nuevo flujo del endpoint `PUT /api/clientes/[id]/codeudor`:
-1. Guarda los campos `codeudorNombre`, `codeudorTelefono`, `codeudorCi`, `codeudorParentesco`
-   en el titular (compatibilidad hacia atrás con Notificaciones).
-2. Calcula `codigoCodeudor = "GAR-" + codigoEntidadTitular`.
-3. Busca si ya existe un `Cliente` con ese código:
-   - Si existe → actualiza nombre, teléfono, CI, sucursal, vendedor, cobrador.
-   - Si no existe → lo crea con esos datos y el mismo `empresaId` que el titular.
-4. Si algo falla en la creación de la entidad (no debería), no rompe el flujo:
-   el codeudor ya quedó guardado en los campos del titular.
-
-El `DELETE /api/clientes/[id]/codeudor` también elimina la entidad creada (si existe).
+✅ Verificado con TypeScript: 0 errores en los 4 archivos modificados.
+(los ~21 errores que salen en la consola ya existían antes y Vercel los ignora)

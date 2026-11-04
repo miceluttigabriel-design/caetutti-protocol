@@ -27,7 +27,6 @@ export function ConfiguracionModule() {
         <TabsTrigger value="uso">Uso y Límites</TabsTrigger>
         <TabsTrigger value="plantillas">Plantillas</TabsTrigger>
         <TabsTrigger value="ia">IA</TabsTrigger>
-        <TabsTrigger value="automatizacion">Automatización</TabsTrigger>
       </TabsList>
 
       <TabsContent value="general"><GeneralTab /></TabsContent>
@@ -35,7 +34,6 @@ export function ConfiguracionModule() {
       <TabsContent value="uso"><UsoTab /></TabsContent>
       <TabsContent value="plantillas"><PlantillasTab /></TabsContent>
       <TabsContent value="ia"><IATab /></TabsContent>
-      <TabsContent value="automatizacion"><AutomatizacionTab /></TabsContent>
     </Tabs>
   );
 }
@@ -55,6 +53,8 @@ function useConfig() {
 function GeneralTab() {
   const { config, isLoading } = useConfig();
   const [form, setForm] = useState<any>(null);
+  const [borrando, setBorrando] = useState(false);
+  const [showConfirmBorrar, setShowConfirmBorrar] = useState(false);
   const qc = useQueryClient();
 
   useEffect(() => { if (config && !form) setForm(config); }, [config]);
@@ -72,31 +72,106 @@ function GeneralTab() {
     onError: () => toast.error("Error al guardar"),
   });
 
+  const borrarDeudas = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/deudas/borrar-todas?confirmar=true", { method: "DELETE" });
+      if (!r.ok) throw new Error((await r.json()).error || "Error");
+      return r.json();
+    },
+    onSuccess: (data: any) => {
+      toast.success(data.mensaje || "Deudas borradas");
+      qc.invalidateQueries({ queryKey: ["dashboard"] });
+      qc.invalidateQueries({ queryKey: ["cuotas"] });
+      qc.invalidateQueries({ queryKey: ["notifs"] });
+      qc.invalidateQueries({ queryKey: ["clientes"] });
+      setShowConfirmBorrar(false);
+    },
+    onError: (e: any) => toast.error(e.message || "Error al borrar"),
+  });
+
   if (isLoading || !form) return <Skeleton className="h-64" />;
 
   return (
-    <Card className="glass-card">
-      <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Key className="w-4 h-4" /> Contraseña y Cooldown</CardTitle></CardHeader>
-      <CardContent className="space-y-4">
-        <div>
-          <Label className="text-xs">Contraseña por defecto (usuarios nuevos)</Label>
-          <Input value={form.defaultPassword} onChange={(e) => setForm({...form, defaultPassword: e.target.value})} />
-        </div>
-        <div className="grid grid-cols-2 gap-3">
+    <div className="space-y-3">
+      <Card className="glass-card">
+        <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Key className="w-4 h-4" /> Contraseña y Cooldown</CardTitle></CardHeader>
+        <CardContent className="space-y-4">
           <div>
-            <Label className="text-xs">Cooldown Clientes (días)</Label>
-            <Input type="number" value={form.cooldownClientes} onChange={(e) => setForm({...form, cooldownClientes: Number(e.target.value)})} />
+            <Label className="text-xs">Contraseña por defecto (usuarios nuevos)</Label>
+            <Input value={form.defaultPassword} onChange={(e) => setForm({...form, defaultPassword: e.target.value})} />
           </div>
-          <div>
-            <Label className="text-xs">Cooldown Codeudores (días)</Label>
-            <Input type="number" value={form.cooldownCodeudores} onChange={(e) => setForm({...form, cooldownCodeudores: Number(e.target.value)})} />
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label className="text-xs">Cooldown Clientes (días)</Label>
+              <Input type="number" value={form.cooldownClientes} onChange={(e) => setForm({...form, cooldownClientes: Number(e.target.value)})} />
+            </div>
+            <div>
+              <Label className="text-xs">Cooldown Codeudores (días)</Label>
+              <Input type="number" value={form.cooldownCodeudores} onChange={(e) => setForm({...form, cooldownCodeudores: Number(e.target.value)})} />
+            </div>
           </div>
-        </div>
-        <Button onClick={() => save.mutate()} disabled={save.isPending} className="glow-primary">
-          <Save className="w-4 h-4 mr-1" /> {save.isPending ? "Guardando…" : "Guardar"}
-        </Button>
-      </CardContent>
-    </Card>
+          <Button onClick={() => save.mutate()} disabled={save.isPending} className="glow-primary">
+            <Save className="w-4 h-4 mr-1" /> {save.isPending ? "Guardando…" : "Guardar"}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* === ZONA PELIGROSA (movida desde la pestaña Automatización, ahora eliminada) === */}
+      <Card className="glass-card border-red-500/30">
+        <CardHeader>
+          <CardTitle className="text-sm flex items-center gap-2 text-red-400">
+            <Trash2 className="w-4 h-4" /> 🗑️ Zona Peligrosa
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
+            <p className="text-sm font-semibold text-red-300 mb-1">Borrar TODAS las deudas</p>
+            <p className="text-xs text-muted-foreground mb-2">
+              Elimina todas las deudas (cuotas), notificaciones, conversaciones y logs de la empresa.
+              <strong className="text-emerald-400"> Los clientes se PRESERVAN.</strong> Esta acción es irreversible.
+            </p>
+            <p className="text-[10px] text-muted-foreground">
+              Útil cuando necesitas re-importar datos actualizados sin duplicar deudas antiguas.
+            </p>
+          </div>
+
+          {!showConfirmBorrar ? (
+            <Button
+              variant="outline"
+              className="text-red-400 border-red-500/30 hover:bg-red-500/10"
+              onClick={() => setShowConfirmBorrar(true)}
+            >
+              <Trash2 className="w-3.5 h-3.5 mr-1" /> Borrar todas las deudas
+            </Button>
+          ) : (
+            <div className="space-y-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
+              <p className="text-xs text-red-300 font-semibold">⚠️ ¿Confirmar borrado de TODAS las deudas?</p>
+              <p className="text-[10px] text-muted-foreground">
+                Se borrarán: cuotas, notificaciones, conversaciones, contactos del día y logs.
+                Los <strong className="text-emerald-400">clientes se preservan</strong>.
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="destructive"
+                  size="sm"
+                  disabled={borrando || borrarDeudas.isPending}
+                  onClick={() => borrarDeudas.mutate()}
+                >
+                  {borrarDeudas.isPending ? "Borrando…" : "✓ Sí, borrar todo"}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setShowConfirmBorrar(false)}
+                >
+                  Cancelar
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }
 
@@ -865,131 +940,9 @@ function IATab() {
   );
 }
 
-function AutomatizacionTab() {
-  const { config, isLoading } = useConfig();
-  const [form, setForm] = useState<any>(null);
-  const [borrando, setBorrando] = useState(false);
-  const [showConfirmBorrar, setShowConfirmBorrar] = useState(false);
-  const qc = useQueryClient();
-
-  useEffect(() => { if (config && !form) setForm(config); }, [config]);
-
-  const save = useMutation({
-    mutationFn: async () => {
-      const r = await fetch("/api/config", {
-        method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          autoNotificar: form.autoNotificar,
-          autoDetectarCompromisos: form.autoDetectarCompromisos,
-        }),
-      });
-      if (!r.ok) throw new Error();
-      return r.json();
-    },
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ["config"] }); toast.success("Automatización guardada"); },
-    onError: () => toast.error("Error al guardar"),
-  });
-
-  const borrarDeudas = useMutation({
-    mutationFn: async () => {
-      const r = await fetch("/api/deudas/borrar-todas?confirmar=true", { method: "DELETE" });
-      if (!r.ok) throw new Error((await r.json()).error || "Error");
-      return r.json();
-    },
-    onSuccess: (data: any) => {
-      toast.success(data.mensaje || "Deudas borradas");
-      qc.invalidateQueries({ queryKey: ["dashboard"] });
-      qc.invalidateQueries({ queryKey: ["cuotas"] });
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-      qc.invalidateQueries({ queryKey: ["clientes"] });
-      setShowConfirmBorrar(false);
-    },
-    onError: (e: any) => toast.error(e.message || "Error al borrar"),
-  });
-
-  if (isLoading || !form) return <Skeleton className="h-64" />;
-
-  return (
-    <div className="space-y-3">
-      <Card className="glass-card">
-        <CardHeader><CardTitle className="text-sm">🤖 Automatización Inteligente</CardTitle></CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-            <div>
-              <p className="font-medium text-sm">Notificaciones automáticas</p>
-              <p className="text-xs text-muted-foreground">Enviar WhatsApp automáticamente según reglas configuradas (cron diario)</p>
-            </div>
-            <Switch checked={form.autoNotificar} onCheckedChange={(v) => setForm({...form, autoNotificar: v})} />
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
-            <div>
-              <p className="font-medium text-sm">Detección automática de compromisos</p>
-              <p className="text-xs text-muted-foreground">IA analiza conversaciones entrantes y detecta promesas de pago</p>
-            </div>
-            <Switch checked={form.autoDetectarCompromisos} onCheckedChange={(v) => setForm({...form, autoDetectarCompromisos: v})} />
-          </div>
-
-          <Button onClick={() => save.mutate()} disabled={save.isPending} className="glow-primary">
-            <Save className="w-4 h-4 mr-1" /> {save.isPending ? "Guardando…" : "Guardar"}
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* === BORRAR TODAS LAS DEUDAS === */}
-      <Card className="glass-card border-red-500/30">
-        <CardHeader>
-          <CardTitle className="text-sm flex items-center gap-2 text-red-400">
-            <Trash2 className="w-4 h-4" /> 🗑️ Zona Peligrosa
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20">
-            <p className="text-sm font-semibold text-red-300 mb-1">Borrar TODAS las deudas</p>
-            <p className="text-xs text-muted-foreground mb-2">
-              Elimina todas las deudas (cuotas), notificaciones, conversaciones y logs de la empresa.
-              <strong className="text-emerald-400"> Los clientes se PRESERVAN.</strong> Esta acción es irreversible.
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              Útil cuando necesitas re-importar datos actualizados sin duplicar deudas antiguas.
-            </p>
-          </div>
-
-          {!showConfirmBorrar ? (
-            <Button
-              variant="outline"
-              className="text-red-400 border-red-500/30 hover:bg-red-500/10"
-              onClick={() => setShowConfirmBorrar(true)}
-            >
-              <Trash2 className="w-3.5 h-3.5 mr-1" /> Borrar todas las deudas
-            </Button>
-          ) : (
-            <div className="space-y-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30">
-              <p className="text-xs text-red-300 font-semibold">⚠️ ¿Confirmar borrado de TODAS las deudas?</p>
-              <p className="text-[10px] text-muted-foreground">
-                Se borrarán: cuotas, notificaciones, conversaciones, contactos del día y logs.
-                Los <strong className="text-emerald-400">clientes se preservan</strong>.
-              </p>
-              <div className="flex gap-2">
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={borrando || borrarDeudas.isPending}
-                  onClick={() => borrarDeudas.mutate()}
-                >
-                  {borrarDeudas.isPending ? "Borrando…" : "✓ Sí, borrar todo"}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShowConfirmBorrar(false)}
-                >
-                  Cancelar
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
-}
+/*
+ * La pestaña "Automatización" fue eliminada a pedido del usuario.
+ * Las opciones "Notificaciones automáticas" y "Detección automática de compromisos"
+ * se movieron a la pestaña Notificaciones (panel arriba de la lista),
+ * y la "Zona Peligrosa" se movió a la pestaña General de esta configuración.
+ */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,31 +10,18 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2, Building2 } from "lucide-react";
+import { Search, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2 } from "lucide-react";
 import { fmtGs, fmtPhone, fmtRelative, fmtDateTime } from "@/lib/format";
 import { toast } from "sonner";
 
 const POR_PAGINA = 50;
 
-export function ClientesModule() {
+export function ClientesModule({ sucursal }: { sucursal: string }) {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [pagina, setPagina] = useState(1);
-  const [sucursalSel, setSucursalSel] = useState<string>("todas");
   const [editing, setEditing] = useState<any | null>(null);
   const [viewing, setViewing] = useState<any | null>(null);
-
-  // Lista de sucursales para el filtro (cache largo — no cambia casi nunca)
-  const { data: sucData } = useQuery({
-    queryKey: ["sucursales"],
-    queryFn: async () => {
-      const r = await fetch("/api/sucursales");
-      if (!r.ok) throw new Error();
-      return r.json();
-    },
-    staleTime: 30 * 60 * 1000,
-  });
-  const sucursales = sucData?.sucursales || [];
 
   const { data, isLoading, isFetching } = useQuery({
     queryKey: ["clientes"],
@@ -49,9 +36,12 @@ export function ClientesModule() {
     refetchOnWindowFocus: false,
   });
 
-  // Filtro por sucursal + búsqueda
+  // Al cambiar la sucursal global (barra superior), volver a la página 1
+  useEffect(() => { setPagina(1); }, [sucursal]);
+
+  // Filtro por sucursal (selector global de la barra superior) + búsqueda
   const clientes = (data?.clientes || []).filter((c: any) => {
-    if (sucursalSel !== "todas" && c.sucursalId !== sucursalSel) return false;
+    if (sucursal !== "__TODAS__" && c.sucursalId !== sucursal) return false;
     const q = search.toLowerCase();
     return !q
       || c.entidad?.toLowerCase().includes(q)
@@ -79,19 +69,6 @@ export function ClientesModule() {
             className="pl-9 glass-card"
           />
         </div>
-        {/* Filtro por sucursal */}
-        <Select value={sucursalSel} onValueChange={(v) => { setSucursalSel(v); setPagina(1); }}>
-          <SelectTrigger className="w-full sm:w-52 glass-card">
-            <Building2 className="w-3.5 h-3.5 mr-1.5 text-primary" />
-            <SelectValue placeholder="Todas las sucursales" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Todas las sucursales</SelectItem>
-            {sucursales.map((s: any) => (
-              <SelectItem key={s.id} value={s.id}>{s.nombre}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
         {isFetching && !isLoading && (
           <span className="self-center text-xs text-muted-foreground animate-pulse">actualizando…</span>
         )}

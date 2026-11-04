@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Send, Eye, RefreshCw, Phone, AlertTriangle, UserPlus, User, Search, Trash2, ShieldCheck, Edit2, DollarSign } from "lucide-react";
+import { Send, Eye, RefreshCw, Phone, AlertTriangle, UserPlus, User, Search, Trash2, ShieldCheck, Edit2, DollarSign, Save, Bot, Bell, Brain } from "lucide-react";
 import { fmtGs, fmtPhone, diasEstado, fmtRelative, fmtDateTime, fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -50,6 +50,9 @@ export function NotificacionesModule({ sucursal }: { sucursal: string }) {
 
   return (
     <div className="space-y-4">
+      {/* === Panel de Automatización (movido desde Configuración para acceso rápido) === */}
+      <AutomatizacionPanel />
+
       {/* Toolbar */}
       <div className="flex flex-wrap gap-2 items-center">
         {/* Pestañas: Titulares / Codeudores */}
@@ -1357,5 +1360,114 @@ function NuevoCodeudorDialog({ onClose, onCreado }: {
         )}
       </DialogContent>
     </Dialog>
+  );
+}
+
+// ============================================================
+// PANEL DE AUTOMATIZACIÓN
+// (movido desde la pestaña "Automatización" de Configuración
+//  para acceso rápido desde Notificaciones)
+// ============================================================
+
+function AutomatizacionPanel() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery({
+    queryKey: ["config"],
+    queryFn: async () => {
+      const r = await fetch("/api/config");
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+  });
+  const config = data?.config;
+  const [form, setForm] = useState<any>(null);
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { if (config && !form) setForm(config); }, [config, form]);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/config", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          autoNotificar: form.autoNotificar,
+          autoDetectarCompromisos: form.autoDetectarCompromisos,
+        }),
+      });
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["config"] });
+      toast.success("Automatización guardada");
+    },
+    onError: () => toast.error("Error al guardar"),
+  });
+
+  if (isLoading || !form) return null;
+
+  // Resumen compacto (siempre visible)
+  const resumen: string[] = [];
+  if (form.autoNotificar) resumen.push("Notif. auto ON");
+  if (form.autoDetectarCompromisos) resumen.push("Detección compromisos ON");
+  if (resumen.length === 0) resumen.push("Sin automatizaciones activas");
+
+  return (
+    <Card className="glass-card">
+      <CardHeader className="pb-2">
+        <div className="flex items-center justify-between">
+          <CardTitle className="text-sm flex items-center gap-2">
+            <Bot className="w-4 h-4 text-primary" />
+            Automatización
+          </CardTitle>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={() => setOpen((v) => !v)}
+          >
+            {open ? "Cerrar" : "Configurar"}
+          </Button>
+        </div>
+        {!open && (
+          <p className="text-[11px] text-muted-foreground mt-1">
+            {resumen.join(" · ")}
+          </p>
+        )}
+      </CardHeader>
+      {open && (
+        <CardContent className="space-y-3 pt-2">
+          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
+            <div className="flex-1 min-w-0 pr-2">
+              <p className="font-medium text-sm flex items-center gap-1.5">
+                <Bell className="w-3.5 h-3.5 text-primary" />
+                Notificaciones automáticas
+              </p>
+              <p className="text-xs text-muted-foreground">Enviar WhatsApp automáticamente según reglas (cron diario)</p>
+            </div>
+            <Switch checked={!!form.autoNotificar} onCheckedChange={(v) => setForm({ ...form, autoNotificar: v })} />
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
+            <div className="flex-1 min-w-0 pr-2">
+              <p className="font-medium text-sm flex items-center gap-1.5">
+                <Brain className="w-3.5 h-3.5 text-primary" />
+                Detección automática de compromisos
+              </p>
+              <p className="text-xs text-muted-foreground">IA analiza conversaciones entrantes y detecta promesas de pago</p>
+            </div>
+            <Switch checked={!!form.autoDetectarCompromisos} onCheckedChange={(v) => setForm({ ...form, autoDetectarCompromisos: v })} />
+          </div>
+          <Button
+            onClick={() => save.mutate()}
+            disabled={save.isPending}
+            className="glow-primary"
+            size="sm"
+          >
+            <Save className="w-3.5 h-3.5 mr-1" /> {save.isPending ? "Guardando…" : "Guardar"}
+          </Button>
+        </CardContent>
+      )}
+    </Card>
   );
 }
