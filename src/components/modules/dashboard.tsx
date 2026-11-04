@@ -52,11 +52,14 @@ export function DashboardPage({ sucursal }: { sucursal: string }) {
 
   const tasaCobranzaPct = Math.max(0, Math.min(100, kpis.tasaCobranza));
 
-  // === % Recuperado del Mes ===
+  // === % Recuperado del Mes (ahora va en el KPI card, no en la barra grande) ===
   const pctRecuperadoMes = Math.max(0, Math.min(100, mes.pctRecuperado));
   const recuperadoColor =
     pctRecuperadoMes >= 85 ? "text-emerald-400" :
     pctRecuperadoMes >= 70 ? "text-amber-400" : "text-red-400";
+  const recuperadoAccent =
+    pctRecuperadoMes >= 85 ? "emerald" :
+    pctRecuperadoMes >= 70 ? "amber" : "red";
 
   return (
     <div className="space-y-4">
@@ -64,17 +67,16 @@ export function DashboardPage({ sucursal }: { sucursal: string }) {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KpiCard
           icon={<Wallet className="w-4 h-4" />}
-          label="Total Pendiente (con interés)"
+          label="Saldo Por Cobrar"
           value={fmtGs(kpis.totalPendiente)}
-          sublabel={`Interés: ${fmtGs(kpis.totalInteres || 0)}`}
           accent="primary"
         />
         <KpiCard
           icon={<TrendingUp className="w-4 h-4" />}
-          label="Tasa de Cobranza"
-          value={fmtPct(tasaCobranzaPct)}
-          sublabel={`sobre ${fmtGsShort(kpis.totalVendido)} vendido`}
-          accent={tasaCobranzaPct >= 85 ? "emerald" : tasaCobranzaPct >= 70 ? "amber" : "red"}
+          label="Total % Recuperado del Mes"
+          value={fmtPct(pctRecuperadoMes)}
+          sublabel={`${fmtGsShort(mes.montoCobrado)} cobrado del mes`}
+          accent={recuperadoAccent as any}
         />
         <KpiCard
           icon={<AlertTriangle className="w-4 h-4" />}
@@ -92,15 +94,11 @@ export function DashboardPage({ sucursal }: { sucursal: string }) {
         />
       </div>
 
-      {/* === BARRA DE % RECUPERADO DEL MES === */}
+      {/* === BARRA DE % RECUPERADO DEL MES (compacta, sin título grande) === */}
       <Card className="glass-card">
         <CardContent className="p-4">
           <div className="flex items-center justify-between mb-2 flex-wrap gap-2">
             <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider flex items-center gap-1">
-                <Calendar className="w-3 h-3" />
-                Total % Recuperado del Mes
-              </p>
               <p className={`text-2xl font-bold ${recuperadoColor}`}>{fmtPct(pctRecuperadoMes)}</p>
               <p className="text-[10px] text-muted-foreground mt-0.5 capitalize">
                 {mes.periodo.mesNombre} · {mes.periodo.inicioStr} → {mes.periodo.finStr}

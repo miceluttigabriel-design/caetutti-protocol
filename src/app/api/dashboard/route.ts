@@ -136,8 +136,9 @@ export async function GET(req: NextRequest) {
     }),
   ]);
 
-  const totalPendiente = cuotas.reduce((s, c) => s + (c.saldoTotalGs || c.saldoGs), 0);
-  const totalInteres = cuotas.reduce((s, c) => s + (c.interesGs || 0), 0);
+  // 🛠️ FIX: "Saldo Por Cobrar" = solo saldoGs (sin interés, no cuadra con Excel)
+  const totalPendiente = cuotas.reduce((s, c) => s + (c.saldoGs || 0), 0);
+  const totalInteres = 0; // no se usa — dejamos en 0 para no mostrar interés en UI
   const totalCuotas = cuotas.length;
   const notificadas = cuotas.filter((c) => c.notificado).length;
   const sinNotificar = totalCuotas - notificadas;
@@ -146,9 +147,9 @@ export async function GET(req: NextRequest) {
   const porVencer = cuotas.filter((c) => c.diasAtrasado <= 0 && c.diasAtrasado >= -7);
   const criticas = cuotas.filter((c) => c.diasAtrasado > 30);
 
-  const totalVencido = vencidas.reduce((s, c) => s + (c.saldoTotalGs || c.saldoGs), 0);
-  const totalPorVencer = porVencer.reduce((s, c) => s + (c.saldoTotalGs || c.saldoGs), 0);
-  const totalCritico = criticas.reduce((s, c) => s + (c.saldoTotalGs || c.saldoGs), 0);
+  const totalVencido = vencidas.reduce((s, c) => s + (c.saldoGs || 0), 0);
+  const totalPorVencer = porVencer.reduce((s, c) => s + (c.saldoGs || 0), 0);
+  const totalCritico = criticas.reduce((s, c) => s + (c.saldoGs || 0), 0);
 
   // Bucket por dias de atraso
   const buckets = [
@@ -169,7 +170,7 @@ export async function GET(req: NextRequest) {
     else if (d <= 90) idx = 4;
     else idx = 5;
     buckets[idx].count++;
-    buckets[idx].monto += (c.saldoTotalGs || c.saldoGs);
+    buckets[idx].monto += (c.saldoGs || 0);
   }
 
   // === Tasa de cobranza general (sobre el total vendido) ===
@@ -188,9 +189,9 @@ export async function GET(req: NextRequest) {
   const totalCobradasMes = cuotasMesCobradas.length;
   const totalPendientesMes = cuotasMesPendientes.length;
 
-  // Montos: para las cobradas usamos saldoGs (lo que se cobró); para pendientes usamos saldoTotalGs (lo que falta)
+  // Montos: para las cobradas usamos saldoGs (lo que se cobró); para pendientes también saldoGs (sin interés)
   const montoCobradoMes = cuotasMesCobradas.reduce((s, c) => s + (c.saldoGs || 0), 0);
-  const montoPendienteMes = cuotasMesPendientes.reduce((s, c) => s + (c.saldoTotalGs || c.saldoGs || 0), 0);
+  const montoPendienteMes = cuotasMesPendientes.reduce((s, c) => s + (c.saldoGs || 0), 0);
   const montoTotalMes = montoCobradoMes + montoPendienteMes;
 
   // % recuperado = cobrado / total * 100
