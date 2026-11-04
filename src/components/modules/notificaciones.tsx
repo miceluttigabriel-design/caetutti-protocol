@@ -278,14 +278,11 @@ function NotifCard({ cliente, onView }: {
     cliente.maxDiasAtraso > 30 ? "text-orange-400" :
     cliente.maxDiasAtraso > 0 ? "text-amber-400" : "text-emerald-400";
 
-  // "Vcto:" de la tarjeta = la cuota POR VENCER más próxima;
-  // si ya todas están vencidas, la vencida más reciente (la más antigua queda al final).
-  const tMid = (q: any) => { const d = new Date(q.fechaVcto); d.setHours(0, 0, 0, 0); return d.getTime(); };
-  const hoyTs = new Date().setHours(0, 0, 0, 0);
-  const proximaCuota =
-    (cliente.cuotas || []).filter((q: any) => tMid(q) >= hoyTs).sort((a: any, b: any) => tMid(a) - tMid(b))[0]
-    || (cliente.cuotas || []).filter((q: any) => tMid(q) < hoyTs).sort((a: any, b: any) => tMid(b) - tMid(a))[0];
-  const proximaFechaVcto = proximaCuota?.fechaVcto;
+  // "Vcto:" de la tarjeta:
+  //   - Si está en bloque POR VENCER → su cuota por vencer más próxima
+  //   - Si está en bloque VENCIDOS → su fecha MÁS VENCIDA (la más antigua)
+  // Esto ya viene calculado por la API como proximaVcto / fechaMasVencida.
+  const proximaFechaVcto = cliente.proximaVcto || cliente.fechaMasVencida;
 
   // Estado legible: "Por vencer" / "Vencido hace Xd"
   const estadoTexto = cliente.maxDiasAtraso > 0
@@ -1031,13 +1028,10 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
 
   const sinTelefono = !codeudor?.telefono;
 
-  // "Vcto:" = la cuota POR VENCER más próxima; si todas vencidas, la más reciente
-  const tMid = (q: any) => { const d = new Date(q.fechaVcto); d.setHours(0, 0, 0, 0); return d.getTime(); };
-  const hoyTs = new Date().setHours(0, 0, 0, 0);
-  const proximaCuota =
-    (cliente.cuotas || []).filter((q: any) => tMid(q) >= hoyTs).sort((a: any, b: any) => tMid(a) - tMid(b))[0]
-    || (cliente.cuotas || []).filter((q: any) => tMid(q) < hoyTs).sort((a: any, b: any) => tMid(b) - tMid(a))[0];
-  const proximaFechaVcto = proximaCuota?.fechaVcto;
+  // "Vcto:" de la tarjeta:
+  //   - Si está en bloque POR VENCER → su cuota por vencer más próxima
+  //   - Si está en bloque VENCIDOS → su fecha MÁS VENCIDA (la más antigua)
+  const proximaFechaVcto = cliente.proximaVcto || cliente.fechaMasVencida;
   const diasColor =
     cliente.maxDiasAtraso > 60 ? "text-red-400" :
     cliente.maxDiasAtraso > 30 ? "text-orange-400" :

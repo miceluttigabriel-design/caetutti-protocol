@@ -117,11 +117,30 @@ export async function GET(req: NextRequest) {
         return px ? tx - ty : ty - tx;
       });
 
-      // Fecha de referencia del cliente: su primera cuota por vencer (null si todas están vencidas)
-      const primera = cuotasMapeadas[0];
-      const proximaVcto = primera && tMidnight(primera.fechaVcto) >= hoy.getTime()
-        ? primera.fechaVcto
-        : null;
+      // === CRITERIO DE BLOQUE (corregido) ===
+      // Si el cliente tiene AL MENOS UNA cuota vencida → va al bloque VENCIDOS
+      //    y mostramos su fecha MÁS VENCIDA (la más antigua).
+      // Si NO tiene ninguna vencida → va al bloque POR VENCER
+      //    y mostramos su cuota por vencer MÁS PRÓXIMA.
+      // Así ningún cliente vencido aparece mezclado en medio de los POR VENCER.
+      const hoyTs = hoy.getTime();
+      const tieneVencidas = cuotasMapeadas.some((q) => tMidnight(q.fechaVcto) < hoyTs);
+
+      let proximaVcto: Date | null = null;
+      let fechaMasVencida: Date | null = null;
+      if (tieneVencidas) {
+        fechaMasVencida =
+          cuotasMapeadas
+            .filter((q) => tMidnight(q.fechaVcto) < hoyTs)
+            .sort((a, b) => tMidnight(a.fechaVcto) - tMidnight(b.fechaVcto))[0]?.fechaVcto
+            || null;
+      } else {
+        proximaVcto =
+          cuotasMapeadas
+            .slice()
+            .sort((a, b) => tMidnight(a.fechaVcto) - tMidnight(b.fechaVcto))[0]?.fechaVcto
+            || null;
+      }
 
       return {
         id: c.id,
@@ -134,6 +153,7 @@ export async function GET(req: NextRequest) {
         judicial: c.judicial,
         informconf: c.informconf,
         proximaVcto,
+        fechaMasVencida,
         totalGs,
         totalSaldoSinInteres,
         totalInteres,
