@@ -1,66 +1,69 @@
-# 🎯 FIX ACUMULATIVO: Sin Interés + Mensaje Nuevo + Timezone + WhatsApp Directo
+# 🎯 FIX ACUMULATIVO: Reglas de Mensaje por Mora + Sin Interés + Timezone + WhatsApp
 
-## ⭐ NUEVO en esta versión: NO trabajamos con interés
+## ⭐ NUEVO en esta versión: Reglas de mensaje por rango de días (mora)
 
-### El problema
-El interés que calculaba el sistema **no cuadraba** con el del Excel. El Excel
-solo trae el saldo, así que calcular interés nuestro era incorrecto.
+### Qué hace
+Crea las **12 reglas de pie** (6 para titular + 6 para codeudor) con el enfoque
+que pediste: **el cliente debe consultar el interés por mora con su gestor en
+línea** — no mencionamos monto de interés porque no cuadra con el Excel.
 
-### La solución (3 frentes)
+### Escalado de tono (titular y codeudor, mismo rango):
+| Rango | Tono | Mensaje clave |
+|---|---|---|
+| 0-7 días | Amable | "Verifique el valor de su interés por mora… consulte con su gestor en línea" |
+| 8-30 días | Cordial | "El interés por mora se calcula por día… verifique con su gestor" |
+| 31-60 días | Firme | "El interés sigue acumulándose… no incluya monto estimado, verifique con su gestor" |
+| 61-90 días | Estricto | "Último aviso… verifique interés mora y abone hoy mismo" |
+| 91-180 días | Severo | "AVISO FINAL… verifique interés mora para frenar el proceso legal" |
+| 181+ días | Judicial | "NOTIFICACIÓN LEGAL… verifique interés mora para evitar demanda" |
 
-**1) API de Notificaciones (`route.ts`)**:
-- `saldoTotalGs = saldoGs` (sin interés sumado)
-- `interesGs = 0`
-- `totalInteres = 0`
-- Solo se cuentan los días vencidos (eso sí cuadra)
-
-**2) UI de Notificaciones (`notificaciones.tsx`)**:
-- ❌ Eliminado "+₲X interés" de la tarjeta
-- ❌ Eliminado "Interés acum." y "Saldo s/ interés" del detalle
-- ❌ Eliminado "+₲X interés" del listado de cuotas
-- ✅ Solo se muestra el saldo (el del Excel) y los días vencidos
-
-**3) Generador de mensaje WhatsApp (`mensajes.ts`)**:
-- La variable `{Saldo en Gs}` ahora usa `saldoGs` directo (no `saldoTotalGs`)
-- Las fechas en el mensaje usan UTC (fix timezone)
-- **Nuevo pie por defecto** (el formato que pediste):
-  > *"Verifique el valor de su interés mora para poder abonar su cuenta.
-  >  Consulte ahora mismo con su gestor en línea."*
-
-### Ejemplo de mensaje nuevo:
+### Ejemplo completo (caso FLEITAS, 3 días de atraso):
 ```
 Estimado/a FLEITAS FONCESA, ADILSON, le informamos que tiene
 cuotas pendientes por un total de ₲ 241.208.
 
 - Vence: 01/11/2026 · Saldo: ₲ 241.208 · Vencido hace 3 días
 
-Verifique el valor de su interés mora para poder abonar su cuenta.
-Consulte ahora mismo con su gestor en línea.
+Le recordamos amablemente que su cuota está próxima a vencer o recientemente vencida.
+
+Este es su saldo pendiente de pago. Verifique el valor de su interés por mora
+para poder abonar su cuenta. Consulte ahora mismo con su gestor en línea.
+
+Atentamente,
+Dpto. de Cobranzas — Casa Central
+VIZA HOME
 ```
 
 ---
 
-## ⚠️ PASO IMPORTANTE: actualizar los templates existentes
+## ⚠️ PASOS IMPORTANTES después del deploy
 
-Los templates que ya están en tu BD **NO se actualizan solos** con el deploy.
-Después del deploy tenés que ejecutar este comando UNA vez en la consola
-del navegador (F12 → escribir `allow pasting` → pegar):
+Ejecutá estos **2 comandos** en la consola del navegador (F12 → "allow pasting" → pegar):
 
+**1) Actualizar los templates con el nuevo pie por defecto:**
 ```js
-fetch('/api/admin/reset-mensajes', { method: 'POST' })
-  .then(r => r.json())
-  .then(console.log)
+fetch('/api/admin/reset-mensajes', { method: 'POST' }).then(r => r.json()).then(console.log)
 ```
 
-Esto actualiza los 2 templates (agrupado + codeudor) con el nuevo pie. Si después
-querés personalizar el texto, lo hacés desde **Configuración → Plantillas**.
+**2) Crear las 12 reglas de pie (6 titular + 6 codeudor) con enfoque mora:**
+```js
+fetch('/api/admin/seed-pie-mora', {
+  method: 'POST',
+  headers: {'Content-Type':'application/json'},
+  body: '{}'
+}).then(r => r.json()).then(console.log)
+```
+
+Después de esto, los mensajes WhatsApp ya se generarán automáticamente con el
+pie correcto según los días de atraso de cada cliente. Lo podés verificar en
+**Configuración → Reglas de Notificación**.
 
 ---
 
 ## ✅ También incluye (acumulativo, todo en un ZIP)
 
-1. **⭐ Sin interés**: solo saldo del Excel + días vencidos
-2. **⭐ Mensaje nuevo**: "verifique interés mora con su gestor en línea"
+1. **⭐ Reglas por mora**: 12 reglas (titular + codeudor) por rango de días
+2. **⭐ Sin interés**: solo saldo del Excel + días vencidos (no se muestra interés)
 3. **Fix timezone**: Vcto y días de atraso correctos (FLEITAS: 01/11, 3d)
 4. **WhatsApp directo**: botón Cliente/Codeudor abre wa.me sin bloqueo
 5. **Vencidos fuera de POR VENCER**: con cuota vencida → bloque VENCIDOS
@@ -71,14 +74,15 @@ querés personalizar el texto, lo hacés desde **Configuración → Plantillas**
 
 ---
 
-## 📁 Archivos incluidos (8)
+## 📁 Archivos incluidos (10)
 
 | Archivo | Qué cambia |
 |---|---|
-| `src/lib/mensajes.ts` | ⭐ Saldo sin interés + nuevo pie + fechas UTC |
-| `src/app/api/notificaciones/route.ts` | ⭐ saldoTotalGs=saldoGs, interesGs=0 + criterio vencidos + días UTC |
-| `src/components/modules/notificaciones.tsx` | ⭐ Sin "+interés" en UI + WhatsApp directo + Vcto correcto + días UTC |
-| `src/app/api/admin/reset-mensajes/route.ts` | ⭐ NUEVO: actualiza templates existentes con el nuevo pie |
+| `src/app/api/admin/seed-pie-mora/route.ts` | ⭐ NUEVO: crea las 12 reglas con enfoque mora |
+| `src/app/api/admin/reset-mensajes/route.ts` | NUEVO (de la versión anterior): actualiza templates |
+| `src/lib/mensajes.ts` | Saldo sin interés + nuevo pie + fechas UTC |
+| `src/app/api/notificaciones/route.ts` | saldoTotalGs=saldoGs, interesGs=0 + criterio vencidos + días UTC |
+| `src/components/modules/notificaciones.tsx` | Sin "+interés" en UI + WhatsApp directo + Vcto correcto + días UTC |
 | `src/lib/format/index.ts` | `fmtDate` usa UTC (fix 31/10 → 01/11) |
 | `src/app/api/import/route.ts` | `parseFecha` Excel serial → fecha local |
 | `src/components/modules/clientes.tsx` | Vence: usa `fmtDate` + sin selector interno |
@@ -88,13 +92,9 @@ querés personalizar el texto, lo hacés desde **Configuración → Plantillas**
 ## 🔧 Cómo aplicar
 
 1. Abrí la carpeta del repo: `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
-2. Copiá la carpeta `src` de este ZIP y **reemplazá** la existente (sobrescribe los 9 archivos).
-3. GitHub Desktop → commit (ej: "sin interes + mensaje nuevo + timezone fix") → **Push**.
+2. Copiá la carpeta `src` de este ZIP y **reemplazá** la existente (sobrescribe los 10 archivos).
+3. GitHub Desktop → commit (ej: "reglas mora titular + codeudor") → **Push**.
 4. Esperá 2-3 min el redeploy de Vercel.
-5. **Después del deploy, ejecutá UNA vez en la consola del navegador (F12)**:
-   ```js
-   fetch('/api/admin/reset-mensajes', { method: 'POST' }).then(r => r.json()).then(console.log)
-   ```
-   Esto actualiza los templates con el nuevo pie.
+5. **Después del deploy, ejecutá los 2 comandos fetch** (arriba) en la consola del navegador.
 
-✅ TypeScript: 0 errores en los 9 archivos.
+✅ TypeScript: 0 errores en los 10 archivos.
