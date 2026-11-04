@@ -75,11 +75,22 @@ export function varsCuota(cuota: any): Record<string, string | number> {
 
 /**
  * Busca la regla de pie que corresponde al rango de días.
- * 🛠️ FIX robusto: itera TODAS las reglas y se queda con la que mejor coincida.
- * Si hay empate (varias coinciden), elige la de MAYOR ordenPie (más específica).
- * - diasMaxPie = -1  → rango abierto (181+ días, "en adelante")
- * - diasMaxPie = null → lo tratamos como -1 (rango abierto) por seguridad
- *   PERO solo se elige si no hay otra regla con max numérico que coincida.
+ * 🛠️ FIX DEFINITIVO (a prueba de fallos):
+ *   1) Trae todas las reglas del tipo
+ *   2) Las ordena por diasMinPie DESCENDENTE (la de mayor min primero → 181+, 91-180, 61-90, 31-60, 8-30, 0-7)
+ *   3) Itera y retorna la PRIMERA regla donde diasAtraso >= min
+ *      (si max es numérico > 0, también valida diasAtraso <= max)
+ *
+ * Así, para 1032 días:
+ *   - 181+ (min=181): 1032 >= 181 → TRUE → retorna judicial ✓
+ * Para 5 días:
+ *   - 181+: 5 >= 181 → FALSE
+ *   - 91-180: 5 >= 91 → FALSE
+ *   - ... todos FALSE hasta...
+ *   - 0-7 (min=0, max=7): 5 >= 0 AND 5 <= 7 → TRUE → retorna amable ✓
+ *
+ * Esto funciona sin importar si diasMaxPie es -1, null, o un número — la prioridad
+ * la da el diasMinPie (mayor min = regla más severa = se evalúa primero).
  */
 export async function seleccionarPieDinamico(
   empresaId: string,
@@ -88,28 +99,32 @@ export async function seleccionarPieDinamico(
 ): Promise<string | null> {
   const reglas = await db.regla.findMany({
     where: { empresaId, tipo, activa: true },
-    orderBy: { ordenPie: "asc" },
   });
 
-  // 1) Primero buscar reglas con rango CERRADO (max numérico > 0) que coincidan
-  //    — son las más específicas (0-7, 8-30, 31-60, etc.)
-  for (const r of reglas) {
-    const min = r.diasMinPie ?? 0;
-    const max = r.diasMaxPie;
-    // Solo reglas con max numérico positivo (no -1, no null)
-    if (max !== null && max !== undefined && max > 0) {
-      if (diasAtraso >= min && diasAtraso <= max) return r.mensaje;
-    }
-  }
+  if (reglas.length === 0) return null;
 
-  // 2) Si no encontró, buscar reglas con rango ABIERTO (max = -1 o null)
-  //    — son las de "181+ días" / "en adelante"
-  for (const r of reglas) {
+  // Ordenar por diasMinPie DESCENDENTE (mayor min primero)
+  // Si diasMinPie es null, tratarlo como 0
+  const ordenadas = reglas.slice().sort((a, b) => {
+    const minA = a.diasMinPie ?? 0;
+    const minB = b.diasMinPie ?? 0;
+    return minB - minA; // DESC
+  });
+
+  // Iterar y retornar la PRIMERA regla donde diasAtraso >= min
+  // (y si max es numérico positivo, también diasAtraso <= max)
+  for (const r of ordenadas) {
     const min = r.diasMinPie ?? 0;
     const max = r.diasMaxPie;
-    // Solo reglas de rango abierto (max = -1 o null)
-    if (max === null || max === undefined || max === -1) {
-      if (diasAtraso >= min) return r.mensaje;
+    if (diasAtraso >= min) {
+      // Si max es numérico positivo, validar también el límite superior
+      if (max !== null && max !== undefined && max > 0) {
+        if (diasAtraso <= max) return r.mensaje;
+        // Si diasAtraso > max, esta regla no corresponde (seguir iterando)
+        continue;
+      }
+      // Si max es -1, null, o undefined → rango abierto → retorna
+      return r.mensaje;
     }
   }
 
