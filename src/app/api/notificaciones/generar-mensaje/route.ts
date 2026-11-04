@@ -12,6 +12,11 @@ import { generarMensajeAgrupado, generarMensajeCodeudor } from "@/lib/mensajes";
  *   modo: "cliente" | "codeudor",
  *   cliente: { id, entidad, codigoEntidad, ... cuotas: [...] }
  * }
+ *
+ * 🛠️ FIX CRÍTICO: recalcula `diasAtrasado` al vuelo para cada cuota, porque:
+ *   1. El frontend puede mandar las cuotas sin el campo `diasAtrasado` (o con valor 0)
+ *   2. El `maxDiasAtraso` que se usa para seleccionar el pie dinámico depende de esto
+ *   3. Sin recalcular, el pie siempre sale "amable" (0-7 días) sin importar los días reales
  */
 export async function POST(req: NextRequest) {
   const user = await getSession();
@@ -48,20 +53,32 @@ export async function POST(req: NextRequest) {
     return ok({ mensaje: "Sin cuotas pendientes para notificar." });
   }
 
+  // 🛠️ FIX CRÍTICO: Recalcular diasAtrasado al vuelo para cada cuota.
+  // Sin esto, si el frontend manda diasAtrasado=0 o undefined, el pie siempre
+  // sale "amable" (0-7 días) sin importar los días reales de atraso.
+  const hoy = new Date();
+  const hoyUtcMidnight = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate(), 0, 0, 0, 0);
+  cuotasData = cuotasData.map((q: any) => {
+    const vcto = new Date(q.fechaVcto);
+    const vctoUtcMidnight = Date.UTC(vcto.getUTCFullYear(), vcto.getUTCMonth(), vcto.getUTCDate(), 0, 0, 0, 0);
+    const diffMs = hoyUtcMidnight - vctoUtcMidnight;
+    const diasCalculados = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
+    return {
+      ...q,
+      // Forzar el valor recalculado (sobreescribe lo que vino del frontend)
+      diasAtrasado: diasCalculados,
+    };
+  });
+
   let mensaje: string;
   if (modo === "codeudor") {
-    // Para codeudor: el mensaje va dirigido al codeudor, pero {Entidad} en la
-    // cabecera debe ser el NOMBRE DEL TITULAR (el cliente que debe), no "Codeudor".
-    // El nombre del codeudor se pasa en "nombreCodeudor" para que el template
-    // pueda usarlo si quiere (variable {Nombre Codeudor}).
     const nombreTitular = clienteData.entidad || clienteData.codeudor?.nombre || "el titular";
     const codeudorData = {
-      entidad: nombreTitular,           // ← {Entidad} = nombre del TITULAR
+      entidad: nombreTitular,
       codigoEntidad: clienteData.codigoEntidad,
       telefono: clienteData.codeudor?.telefono || clienteData.codeudorTelefono || "",
       localidad: clienteData.localidad,
       sucursal: clienteData.sucursal,
-      // Info del codeudor (para variable {Nombre Codeudor} en plantillas)
       nombreCodeudor: clienteData.codeudor?.nombre || clienteData.codeudorNombre || "Codeudor",
       informconf: clienteData.informconf || "N",
     };
