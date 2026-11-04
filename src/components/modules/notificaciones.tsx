@@ -278,10 +278,13 @@ function NotifCard({ cliente, onView }: {
     cliente.maxDiasAtraso > 30 ? "text-orange-400" :
     cliente.maxDiasAtraso > 0 ? "text-amber-400" : "text-emerald-400";
 
-  // Calcular la fecha de vencimiento más próxima (la primera cuota pendiente)
-  const proximaCuota = cliente.cuotas?.slice().sort((a: any, b: any) =>
-    new Date(a.fechaVcto).getTime() - new Date(b.fechaVcto).getTime()
-  )[0];
+  // "Vcto:" de la tarjeta = la cuota POR VENCER más próxima;
+  // si ya todas están vencidas, la vencida más reciente (la más antigua queda al final).
+  const tMid = (q: any) => { const d = new Date(q.fechaVcto); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const hoyTs = new Date().setHours(0, 0, 0, 0);
+  const proximaCuota =
+    (cliente.cuotas || []).filter((q: any) => tMid(q) >= hoyTs).sort((a: any, b: any) => tMid(a) - tMid(b))[0]
+    || (cliente.cuotas || []).filter((q: any) => tMid(q) < hoyTs).sort((a: any, b: any) => tMid(b) - tMid(a))[0];
   const proximaFechaVcto = proximaCuota?.fechaVcto;
 
   // Estado legible: "Por vencer" / "Vencido hace Xd"
@@ -1028,10 +1031,12 @@ function CodeudorCard({ cliente, onView, onEditCodeudor }: {
 
   const sinTelefono = !codeudor?.telefono;
 
-  // Calcular fecha de vencimiento más próxima y estado
-  const proximaCuota = cliente.cuotas?.slice().sort((a: any, b: any) =>
-    new Date(a.fechaVcto).getTime() - new Date(b.fechaVcto).getTime()
-  )[0];
+  // "Vcto:" = la cuota POR VENCER más próxima; si todas vencidas, la más reciente
+  const tMid = (q: any) => { const d = new Date(q.fechaVcto); d.setHours(0, 0, 0, 0); return d.getTime(); };
+  const hoyTs = new Date().setHours(0, 0, 0, 0);
+  const proximaCuota =
+    (cliente.cuotas || []).filter((q: any) => tMid(q) >= hoyTs).sort((a: any, b: any) => tMid(a) - tMid(b))[0]
+    || (cliente.cuotas || []).filter((q: any) => tMid(q) < hoyTs).sort((a: any, b: any) => tMid(b) - tMid(a))[0];
   const proximaFechaVcto = proximaCuota?.fechaVcto;
   const diasColor =
     cliente.maxDiasAtraso > 60 ? "text-red-400" :

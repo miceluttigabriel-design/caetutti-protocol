@@ -1,57 +1,72 @@
-# 🎯 FIX ÚNICO: Sucursal Global + Pestañas + Zona Peligrosa
+# 🎯 FIX ACUMULATIVO: Orden de Vencimientos + Sucursal Global + Pestañas
 
-## Qué hace este patch (todo en uno)
+## ⭐ NUEVO en esta versión: Orden de fechas "Vcto" en Notificaciones
 
-### 1️⃣ Sucursal GLOBAL para Clientes (lo nuevo)
-- **ELIMINADO** el selector de sucursal que estaba dentro de la pestaña Clientes
-  (el que estaba al lado del buscador). Ya no existe.
-- Ahora la pestaña **Clientes se filtra con el selector de la barra superior**
-  (el de al lado de "Administrador", con el 📍 MapPin) — **el mismo que usa el Dashboard**.
-- Al elegir una sucursal arriba → Clientes muestra SOLO los clientes de esa sucursal
-  (stats, lista y paginación incluidos). "Todas las sucursales" = ves todo.
-- La sucursal elegida se recuerda aunque cierres sesión (ya lo hacía el sistema).
+### El problema
+La lista de Notificaciones mezclaba los clientes: los "por vencer" aparecían en
+orden **alfabético** (sin importar la fecha) y un cliente con una cuota muy vieja
+se iba al fondo aunque tuviera cuota por vencer.
 
-### 2️⃣ Notificaciones por sucursal (verificado)
-- La pestaña Notificaciones **YA usaba** el selector global de arriba: los clientes
-  a notificar (titulares y codeudores) se filtran por la sucursal elegida arriba.
-- No necesitaba cambios: confirmado en el código (`/api/notificaciones?sucursal=...`).
+### La solución (como lo pediste: de los que están para vencer HASTA los más vencidos)
+**Lista de clientes:**
+1. **Primero los que tienen cuotas POR VENCER**, ordenados por su próximo vencimiento:
+   el que vence mañana → luego +2 días → +3 días… (día y mes reales, cronológico).
+2. **Después los ya vencidos**: del menos vencido al más vencido (el más antiguo queda AL FINAL).
 
-### 3️⃣ Notificaciones automáticas → van DENTRO de Notificaciones
-- Se quitó la pestaña "Automatización" de Configuraciones.
-- Ahora en la parte de **arriba de Notificaciones** hay un panel colapsable
-  "🤖 Automatización" con:
-  - Resumen al instante: `Notif. auto ON · Detección compromisos ON` o "Sin automatizaciones activas"
-  - Botón "Configurar" → muestra los 2 switches:
-    - Notificaciones automáticas
-    - Detección automática de compromisos
-  - Guardado directo.
+**El "Vcto:" de cada tarjeta** ahora muestra la cuota **por vencer más próxima**;
+si el cliente ya tiene todo vencido, muestra la vencida más reciente.
 
-### 4️⃣ Zona Peligrosa → ahora está en General (Configuraciones)
-- La tarjeta roja "🗑️ Zona Peligrosa — Borrar TODAS las deudas" quedó dentro de la
-  pestaña **General** de Configuraciones, abajo de "Contraseña y Cooldown".
-- Sigue pidiendo confirmación en 2 pasos. Los clientes SIEMPRE se preservan.
+**Las cuotas dentro de cada cliente** (detalle y mensaje WhatsApp) quedan igual:
+por vencer primero, la más vencida al final.
 
-### 5️⃣ Pestaña "Automatización" ELIMINADA de Configuraciones
-- Configuraciones queda con 5 pestañas: General, WhatsApp, Uso y Límites, Plantillas, IA.
+*Ejemplo verificado con datos reales de prueba (hoy = 04/11/2026):*
+```
+1. Cliente con vcto 10/11/2026   (por vencer, el más próximo)
+2. Cliente con vcto 15/11/2026
+3. Cliente con vcto 26/11/2026
+4. Cliente con vcto 31/12/2026
+5. Cliente vencido hace 1 día
+6. Cliente vencido hace 441 días (el más vencido, al final)
+```
 
 ---
 
-## 📁 Archivos incluidos (4)
+## ✅ También incluye (de la versión anterior, si no la aplicaste)
+
+### 1. Sucursal GLOBAL para Clientes
+- ELIMINADO el selector de sucursal interno de la pestaña Clientes.
+- Clientes ahora se filtra con el **selector de la barra superior** (📍 junto a
+  "Administrador") — el mismo del Dashboard.
+- **Notificaciones ya filtraba** por ese selector (titulares + codeudores) — verificado.
+
+### 2. Panel 🤖 Automatización dentro de Notificaciones
+- Arriba de la lista, colapsable, con resumen al instante y los 2 switches:
+  Notificaciones automáticas / Detección automática de compromisos.
+
+### 3. 🗑️ Zona Peligrosa → pestaña General de Configuraciones
+- Abajo de "Contraseña y Cooldown", con confirmación en 2 pasos.
+
+### 4. Pestaña "Automatización" ELIMINADA de Configuraciones
+- Quedan 5 pestañas: General, WhatsApp, Uso y Límites, Plantillas, IA.
+
+---
+
+## 📁 Archivos incluidos (5)
 
 | Archivo | Qué cambia |
 |---|---|
+| `src/app/api/notificaciones/route.ts` | ⭐ Orden cronológico real de la lista y las cuotas |
+| `src/components/modules/notificaciones.tsx` | ⭐ "Vcto" correcto en tarjetas + panel Automatización |
 | `src/components/modules/clientes.tsx` | Sin selector interno · filtra por sucursal global |
 | `src/components/dashboard/shell.tsx` | Le pasa la sucursal global a Clientes |
-| `src/components/modules/notificaciones.tsx` | Panel de Automatización arriba |
 | `src/components/modules/configuracion.tsx` | Sin pestaña Automatización · Zona Peligrosa en General |
 
 ## 🔧 Cómo aplicar
 
 1. Abrí la carpeta del repo: `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
-2. Copiá la carpeta `src` de este ZIP y **reemplazá** la existente
-   (sobrescriben 4 archivos, no borra nada más).
-3. GitHub Desktop → commit (ej: "sucursal global + pestanas fix") → **Push**.
-4. Esperá 2-3 min el redeploy de Vercel.
+2. Copiá la carpeta `src` de este ZIP y **reemplazá** la existente (sobrescribe los 5 archivos).
+3. GitHub Desktop → commit (ej: "orden vcto + sucursal global") → **Push**.
+4. Esperá 2-3 min el redeploy de Vercel y probá en Notificaciones.
 
-✅ Verificado con TypeScript: 0 errores en los 4 archivos modificados.
-(los ~21 errores que salen en la consola ya existían antes y Vercel los ignora)
+✅ Verificado con TypeScript: 0 errores en los 5 archivos.
+✅ Lógica de orden probada con simulación de datos (6 casos: por vencer cercano/lejano, mixto, vencido ayer, muy vencido).

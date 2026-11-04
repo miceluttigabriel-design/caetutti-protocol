@@ -100,6 +100,29 @@ export async function GET(req: NextRequest) {
       const todasNotificadas = cuotasMapeadas.every((q) => q.notificado);
       if (ocultarNotificados && todasNotificadas) return null;
 
+      // === ORDEN DE CUOTAS DENTRO DEL CLIENTE ===
+      // 1º: las que están POR VENCER (fechaVcto >= hoy) — la más próxima primero
+      // 2º: las VENCIDAS — la más recientemente vencida primero y la más antigua (más vencida) al final
+      const tMidnight = (d: Date | string) => {
+        const x = new Date(d);
+        x.setHours(0, 0, 0, 0);
+        return x.getTime();
+      };
+      cuotasMapeadas.sort((x, y) => {
+        const tx = tMidnight(x.fechaVcto);
+        const ty = tMidnight(y.fechaVcto);
+        const px = tx >= hoy.getTime();
+        const py = ty >= hoy.getTime();
+        if (px !== py) return px ? -1 : 1;
+        return px ? tx - ty : ty - tx;
+      });
+
+      // Fecha de referencia del cliente: su primera cuota por vencer (null si todas están vencidas)
+      const primera = cuotasMapeadas[0];
+      const proximaVcto = primera && tMidnight(primera.fechaVcto) >= hoy.getTime()
+        ? primera.fechaVcto
+        : null;
+
       return {
         id: c.id,
         codigoEntidad: c.codigoEntidad,
@@ -110,6 +133,7 @@ export async function GET(req: NextRequest) {
         vendedor: c.vendedor,
         judicial: c.judicial,
         informconf: c.informconf,
+        proximaVcto,
         totalGs,
         totalSaldoSinInteres,
         totalInteres,
@@ -135,10 +159,20 @@ export async function GET(req: NextRequest) {
       };
     })
     .filter(Boolean)
-    // === ORDENACIÓN: menos vencido primero (diasAtrasado ascendente) ===
-    // Los "Por vencer" (diasAtraso = 0) van primero, luego los poco vencidos,
-    // y los muy vencidos al final.
-    .sort((a: any, b: any) => a.maxDiasAtraso - b.maxDiasAtraso);
+    // === ORDENACIÓN DE LA LISTA DE CLIENTES ===
+    // 1º: los que tienen cuotas POR VENCER — ordenados por su próximo vencimiento
+    //     (el que vence mañana primero, luego +2 días, +3 días…)
+    // 2º: los que ya están todos VENCIDOS — del menos vencido al más vencido (al final)
+    // Así la lista va "de los que están para vencer hasta los más vencidos",
+    // respetando día y mes reales (no alfabético).
+    .sort((a: any, b: any) => {
+      if (a.proximaVcto && b.proximaVcto) {
+        return new Date(a.proximaVcto).getTime() - new Date(b.proximaVcto).getTime();
+      }
+      if (a.proximaVcto) return -1;
+      if (b.proximaVcto) return 1;
+      return a.maxDiasAtraso - b.maxDiasAtraso;
+    });
 
   // === Actualización en background ===
   // Actualizar las cuotas en DB cuyos diasAtrasado cambiaron.
