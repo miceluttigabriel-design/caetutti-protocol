@@ -30,24 +30,30 @@ export async function PUT(req: NextRequest) {
   if (!user) return unauthorized();
 
   const body = await req.json();
-  const { cabecera, detalle, pieEstatico, usarReglasDinamicas } = body;
+  // 🛠️ FIX: permitir detalle y pieEstatico VACÍOS (string "")
+  // Así el usuario puede armar un mensaje simple sin la sección "Vence · Saldo · días".
+  // Solo validamos que cabecera tenga algo (es el saludo mínimo del mensaje).
+  const cabecera = typeof body.cabecera === "string" ? body.cabecera : "";
+  const detalle = typeof body.detalle === "string" ? body.detalle : "";
+  const pieEstatico = typeof body.pieEstatico === "string" ? body.pieEstatico : null;
+  const usarReglasDinamicas = body.usarReglasDinamicas !== false;
 
-  if (!cabecera || !detalle) {
-    return fail("cabecera y detalle son requeridos");
+  if (!cabecera.trim()) {
+    return fail("La cabecera es obligatoria (no puede estar vacía)");
   }
 
   const template = await db.templateCodeudor.upsert({
     where: { empresaId: user.empresaId },
     update: {
       cabecera, detalle,
-      pieEstatico: pieEstatico || null,
-      usarReglasDinamicas: usarReglasDinamicas !== false,
+      pieEstatico,
+      usarReglasDinamicas,
     },
     create: {
       empresaId: user.empresaId,
       cabecera, detalle,
-      pieEstatico: pieEstatico || null,
-      usarReglasDinamicas: usarReglasDinamicas !== false,
+      pieEstatico,
+      usarReglasDinamicas,
     },
   });
 

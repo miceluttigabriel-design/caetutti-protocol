@@ -152,7 +152,8 @@ export async function generarMensajeAgrupado(
   if (cliente.informconf === "S") {
     partes.push("⚠ AVISO: Su cuenta figura en INFORCONF. Regularice urgentemente para evitar acciones legales.");
   }
-  partes.push(detalles);
+  // 🛠️ Solo agregar el detalle si no está vacío (puede ser "" si el usuario lo borró)
+  if (detalles && detalles.trim()) partes.push(detalles);
   if (pie) partes.push(pie);
   return partes.join("\n\n");
 }
@@ -213,7 +214,8 @@ export async function generarMensajeCodeudor(
   if (titularInformconf === "S") {
     partes.push("⚠ AVISO: La cuenta del titular figura en INFORCONF. Regularice urgentemente para evitar acciones legales.");
   }
-  partes.push(detalles);
+  // 🛠️ Solo agregar el detalle si no está vacío
+  if (detalles && detalles.trim()) partes.push(detalles);
   if (pie) partes.push(pie);
   return partes.join("\n\n");
 }

@@ -30,16 +30,22 @@ export async function GET() {
 
 /**
  * PUT /api/templates/agrupada — actualiza el template
+ * 🛠️ FIX: permite detalle y pieEstatico VACÍOS (string "") para que el usuario
+ * pueda armar un mensaje simple sin la sección "Vence · Saldo · días".
+ * Solo la cabecera es obligatoria (saludo mínimo del mensaje).
  */
 export async function PUT(req: NextRequest) {
   const user = await getSession();
   if (!user) return unauthorized();
 
   const body = await req.json();
-  const { cabecera, detalle, pieEstatico, usarReglasDinamicas } = body;
+  const cabecera = typeof body.cabecera === "string" ? body.cabecera : "";
+  const detalle = typeof body.detalle === "string" ? body.detalle : "";
+  const pieEstatico = typeof body.pieEstatico === "string" ? body.pieEstatico : null;
+  const usarReglasDinamicas = body.usarReglasDinamicas !== false;
 
-  if (!cabecera || !detalle) {
-    return fail("cabecera y detalle son requeridos");
+  if (!cabecera.trim()) {
+    return fail("La cabecera es obligatoria (no puede estar vacía)");
   }
 
   const template = await db.templateAgrupada.upsert({
@@ -47,15 +53,15 @@ export async function PUT(req: NextRequest) {
     update: {
       cabecera,
       detalle,
-      pieEstatico: pieEstatico || null,
-      usarReglasDinamicas: usarReglasDinamicas !== false,
+      pieEstatico,
+      usarReglasDinamicas,
     },
     create: {
       empresaId: user.empresaId,
       cabecera,
       detalle,
-      pieEstatico: pieEstatico || null,
-      usarReglasDinamicas: usarReglasDinamicas !== false,
+      pieEstatico,
+      usarReglasDinamicas,
     },
   });
 
