@@ -75,7 +75,11 @@ export function varsCuota(cuota: any): Record<string, string | number> {
 
 /**
  * Busca la regla de pie que corresponde al rango de días.
- * Si diasMaxPie = -1, significa "en adelante" (90+).
+ * 🛠️ FIX robusto: itera TODAS las reglas y se queda con la que mejor coincida.
+ * Si hay empate (varias coinciden), elige la de MAYOR ordenPie (más específica).
+ * - diasMaxPie = -1  → rango abierto (181+ días, "en adelante")
+ * - diasMaxPie = null → lo tratamos como -1 (rango abierto) por seguridad
+ *   PERO solo se elige si no hay otra regla con max numérico que coincida.
  */
 export async function seleccionarPieDinamico(
   empresaId: string,
@@ -87,16 +91,28 @@ export async function seleccionarPieDinamico(
     orderBy: { ordenPie: "asc" },
   });
 
+  // 1) Primero buscar reglas con rango CERRADO (max numérico > 0) que coincidan
+  //    — son las más específicas (0-7, 8-30, 31-60, etc.)
   for (const r of reglas) {
     const min = r.diasMinPie ?? 0;
-    const max = r.diasMaxPie ?? -1;
-    if (max === -1) {
-      // Rango abierto: 91+ días
-      if (diasAtraso >= min) return r.mensaje;
-    } else {
+    const max = r.diasMaxPie;
+    // Solo reglas con max numérico positivo (no -1, no null)
+    if (max !== null && max !== undefined && max > 0) {
       if (diasAtraso >= min && diasAtraso <= max) return r.mensaje;
     }
   }
+
+  // 2) Si no encontró, buscar reglas con rango ABIERTO (max = -1 o null)
+  //    — son las de "181+ días" / "en adelante"
+  for (const r of reglas) {
+    const min = r.diasMinPie ?? 0;
+    const max = r.diasMaxPie;
+    // Solo reglas de rango abierto (max = -1 o null)
+    if (max === null || max === undefined || max === -1) {
+      if (diasAtraso >= min) return r.mensaje;
+    }
+  }
+
   return null;
 }
 
