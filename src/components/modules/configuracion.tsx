@@ -14,9 +14,10 @@ import { Progress } from "@/components/ui/progress";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Save, Key, MessageSquare, Bot, Brain, AlertTriangle, ExternalLink, CheckCircle2, XCircle, Plus, Trash2, Zap, TrendingUp } from "lucide-react";
+import { Save, Key, MessageSquare, Bot, Brain, AlertTriangle, ExternalLink, CheckCircle2, XCircle, Plus, Trash2, Zap, TrendingUp, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { fmtGs } from "@/lib/format";
+import { ImportarModule } from "@/components/modules/importar";
 
 export function ConfiguracionModule() {
   return (
@@ -27,6 +28,10 @@ export function ConfiguracionModule() {
         <TabsTrigger value="uso">Uso y Límites</TabsTrigger>
         <TabsTrigger value="plantillas">Plantillas</TabsTrigger>
         <TabsTrigger value="ia">IA</TabsTrigger>
+        <TabsTrigger value="importar">
+          <Upload className="w-3.5 h-3.5 inline mr-1" />
+          Importar Datos
+        </TabsTrigger>
       </TabsList>
 
       <TabsContent value="general"><GeneralTab /></TabsContent>
@@ -34,6 +39,7 @@ export function ConfiguracionModule() {
       <TabsContent value="uso"><UsoTab /></TabsContent>
       <TabsContent value="plantillas"><PlantillasTab /></TabsContent>
       <TabsContent value="ia"><IATab /></TabsContent>
+      <TabsContent value="importar"><ImportarModule /></TabsContent>
     </Tabs>
   );
 }

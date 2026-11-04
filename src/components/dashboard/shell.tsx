@@ -12,9 +12,6 @@ import { ReglasModule } from "@/components/modules/reglas";
 import { ComunicacionesModule } from "@/components/modules/comunicaciones";
 import { RecordatoriosModule } from "@/components/modules/recordatorios";
 import { ConfiguracionModule } from "@/components/modules/configuracion";
-import { UsuariosModule } from "@/components/modules/usuarios";
-import { AdminUsuariosModule } from "@/components/modules/admin-usuarios";
-import { ImportarModule } from "@/components/modules/importar";
 import { MantenimientoCuotasModule } from "@/components/modules/mantenimiento-cuotas";
 import { ContactosDiaModule } from "@/components/modules/contactos-dia";
 import { HistorialModule } from "@/components/modules/historial";
@@ -126,11 +123,16 @@ function renderPage(page: PageKey, sucursal: string) {
     case "recordatorios": return <RecordatoriosModule />;
     case "reglas": return <ReglasModule />;
     case "configuracion": return <ConfiguracionModule />;
-    case "admin-usuarios": return <AdminUsuariosModule />;
-    case "importar": return <ImportarModule />;
     case "mantenimiento-cuotas": return <MantenimientoCuotasModule />;
     case "contactos-dia": return <ContactosDiaModule />;
     case "historial": return <HistorialModule />;
+    // "importar" y "admin-usuarios" ya no están en el sidebar:
+    // - Importar Datos → ahora es pestaña dentro de Configuración
+    // - Usuarios y Grupos → eliminado (solo usa el admin)
+    // Si por URL vieja alguien entra, redirige a Configuración / Dashboard.
+    case "importar": return <ConfiguracionModule />;
+    case "admin-usuarios":
+    case "admin-grupos": return <DashboardPage sucursal={sucursal} />;
     default: return <DashboardPage sucursal={sucursal} />;
   }
 }

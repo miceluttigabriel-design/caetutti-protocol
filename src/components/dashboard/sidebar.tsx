@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Users, CreditCard, Bell, MessageCircle, Clock, Settings, BookOpen, UserCog, LogOut, X, ChevronRight, Upload, Wrench, Phone, History } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Bell, MessageCircle, Clock, Settings, BookOpen, LogOut, X, ChevronRight, Wrench, Phone, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -18,7 +18,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: "dashboard", label: "Dashboard", icon: <LayoutDashboard className="w-4 h-4" />, permiso: "ver_dashboard", group: "Principal" },
-  { id: "importar", label: "Importar Datos", icon: <Upload className="w-4 h-4" />, permiso: "ver_importar", group: "Principal" },
   { id: "notificaciones", label: "Notificaciones", icon: <Bell className="w-4 h-4" />, permiso: "ver_notificaciones", group: "Notificaciones" },
   { id: "comunicaciones", label: "Comunicaciones", icon: <MessageCircle className="w-4 h-4" />, permiso: "ver_comunicaciones", group: "Notificaciones" },
   { id: "recordatorios", label: "Promesas de Pago", icon: <Clock className="w-4 h-4" />, permiso: "ver_recordatorios", group: "Notificaciones" },
@@ -29,7 +28,6 @@ const NAV_ITEMS: NavItem[] = [
   { id: "mantenimiento-cuotas", label: "Mantenimiento", icon: <Wrench className="w-4 h-4" />, permiso: "ver_mantenimiento_cuotas", group: "Negocio" },
   { id: "reglas", label: "Reglas", icon: <BookOpen className="w-4 h-4" />, permiso: "ver_reglas", group: "Configuración" },
   { id: "configuracion", label: "Configuración", icon: <Settings className="w-4 h-4" />, permiso: "ver_configuracion", group: "Configuración" },
-  { id: "admin-usuarios", label: "Usuarios y Grupos", icon: <UserCog className="w-4 h-4" />, permiso: "admin_usuarios", group: "Admin" },
 ];
 
 interface SidebarProps {
