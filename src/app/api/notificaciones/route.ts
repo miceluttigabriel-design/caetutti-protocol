@@ -188,10 +188,14 @@ export async function GET(req: NextRequest) {
     .filter(Boolean)
     // === ORDENACIÓN DE LA LISTA DE CLIENTES ===
     // Bloques igual que antes: POR VENCER arriba, VENCIDOS abajo (aprobado, se conserva).
-    // ⭐ ÚNICO CAMBIO: dentro de POR VENCER se ordena por FECHA de MAYOR a MENOR
-    //    (la fecha más lejana en el futuro primero; la más próxima a vencer al final
-    //     de ese bloque). Los VENCIDOS siguen igual: del menos vencido al más vencido.
+    // Dentro de cada bloque:
+    //   ⭐ PRIMERO los clientes con informconf="S" (alerta INFORCONF优先)
+    //   Después por fecha (mayor a menor en POR VENCER; menos → más vencido en VENCIDOS)
     .sort((a: any, b: any) => {
+      const aInf = a.informconf === "S" ? 1 : 0;
+      const bInf = b.informconf === "S" ? 1 : 0;
+      // INFORCONF "S" primero dentro del bloque
+      if (aInf !== bInf) return bInf - aInf;
       if (a.proximaVcto && b.proximaVcto) {
         return new Date(b.proximaVcto).getTime() - new Date(a.proximaVcto).getTime();
       }

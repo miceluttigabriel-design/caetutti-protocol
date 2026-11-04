@@ -81,6 +81,9 @@ export async function POST(req: NextRequest) {
       telefono: clienteData.codeudorTelefono || "",
       localidad: clienteData.localidad,
       sucursal: clienteData.sucursal,
+      // 🛠️ Pasamos informconf del TITULAR para que el mensaje del codeudor
+      // también incluya el aviso INFORCONF si corresponde.
+      informconf: clienteData.informconf || "N",
     };
     mensaje = await generarMensajeCodeudor(user.empresaId, codeudorData, cuotasData);
   } else {

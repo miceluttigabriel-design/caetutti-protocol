@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2 } from "lucide-react";
+import { Search, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2, FileText } from "lucide-react";
 import { fmtGs, fmtPhone, fmtRelative, fmtDateTime, fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -74,6 +74,9 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
         )}
       </div>
 
+      {/* === Panel Alertas INFORCONF (clientes marcados sin cuota pendiente) === */}
+      <AlertasInforconf sucursal={sucursal} />
+
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <MiniStat label="Total" value={String(clientes.length)} accent="text-primary" />
@@ -92,7 +95,7 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Teléfono</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Sucursal</th>
                 <th className="text-right px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Saldo</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Cuotas</th>
+                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">INFORCONF</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Notificado</th>
                 <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Acciones</th>
               </tr>
@@ -133,7 +136,33 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
                     <span className="font-semibold text-amber-400">{fmtGs(c.saldoTotal)}</span>
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <Badge variant="secondary" className="text-xs">{c.cuotasPendientes}</Badge>
+                    <button
+                      title={c.informconf === "S" ? "En INFORCONF — click para quitar" : "No está en INFORCONF — click para marcar"}
+                      onClick={async () => {
+                        const nuevo = c.informconf === "S" ? "N" : "S";
+                        try {
+                          const r = await fetch(`/api/clientes/${c.id}`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ informconf: nuevo }),
+                          });
+                          if (!r.ok) throw new Error();
+                          // Actualizar el cliente en el estado local para feedback inmediato
+                          c.informconf = nuevo;
+                          qc.invalidateQueries({ queryKey: ["clientes"] });
+                          toast.success(nuevo === "S" ? "Marcado en INFORCONF" : "Desmarcado INFORCONF");
+                        } catch {
+                          toast.error("Error al actualizar");
+                        }
+                      }}
+                      className={`inline-flex items-center justify-center w-7 h-7 rounded-md border text-xs font-bold transition-all ${
+                        c.informconf === "S"
+                          ? "bg-amber-500/20 border-amber-500/50 text-amber-400 hover:bg-amber-500/30"
+                          : "bg-secondary/30 border-border/40 text-muted-foreground hover:bg-secondary/60"
+                      }`}
+                    >
+                      {c.informconf === "S" ? "Sí" : "No"}
+                    </button>
                   </td>
                   <td className="px-3 py-2.5">
                     {c.notificado && c.ultimaNotificacion ? (
@@ -536,5 +565,159 @@ function DetailRow({ label, value, highlight }: { label: string; value: string; 
       <span className="text-xs text-muted-foreground">{label}</span>
       <span className={`font-medium ${highlight ? "text-amber-400" : ""}`}>{value}</span>
     </div>
+  );
+}
+
+// ============================================================
+// PANEL: ALERTAS INFORCONF
+// Clientes marcados en INFORCONF="S" SIN cuotas pendientes.
+// Genera alerta + reporte imprimible / PDF.
+// ============================================================
+
+function AlertasInforconf({ sucursal }: { sucursal: string }) {
+  const { data, isLoading } = useQuery({
+    queryKey: ["inforconf-alertas", sucursal],
+    queryFn: async () => {
+      const r = await fetch(`/api/inforconf/alertas?sucursal=${encodeURIComponent(sucursal)}`);
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+  });
+
+  const alertas: any[] = data?.alertas || [];
+
+  // === EXPORTAR / IMPRIMIR PDF ===
+  // Abre una ventana nueva con HTML limpio + window.print() → el usuario
+  // puede guardar como PDF o imprimir directo. No requiere libs externas.
+  const exportarPDF = () => {
+    const hoy = new Date();
+    const fechaStr = hoy.toLocaleDateString("es-PY") + " " + hoy.toLocaleTimeString("es-PY");
+    const filas = alertas.map((a, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${a.codigoEntidad || "—"}</td>
+        <td>${a.entidad || "—"}</td>
+        <td>${a.ciEntidad || "—"}</td>
+        <td>${a.telefono || "—"}</td>
+        <td>${a.localidad || "—"}</td>
+        <td>${a.sucursal || "—"}</td>
+        <td>${a.vendedor || "—"}</td>
+        <td>${a.judicial ? "Sí" : "No"}</td>
+        <td>${a.ultimaNotificacion ? new Date(a.ultimaNotificacion).toLocaleDateString("es-PY") : "—"}</td>
+      </tr>
+    `).join("");
+
+    const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Alertas INFORCONF — ${fechaStr}</title>
+<style>
+  * { font-family: 'Liberation Sans', Arial, sans-serif; box-sizing: border-box; }
+  body { margin: 24px; color: #111; font-size: 11px; }
+  h1 { color: #b91c1c; font-size: 18px; margin: 0 0 4px; }
+  .meta { color: #555; font-size: 10px; margin-bottom: 16px; }
+  .resumen { background: #fef3c7; border: 1px solid #fbbf24; padding: 8px 12px; border-radius: 4px; margin-bottom: 16px; font-size: 11px; }
+  .resumen strong { color: #b91c1c; }
+  table { width: 100%; border-collapse: collapse; }
+  th { background: #b91c1c; color: white; padding: 6px 4px; text-align: left; font-size: 10px; text-transform: uppercase; }
+  td { padding: 5px 4px; border-bottom: 1px solid #ddd; font-size: 10px; }
+  tr:nth-child(even) td { background: #f9fafb; }
+  .footer { margin-top: 20px; font-size: 9px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
+  @media print {
+    body { margin: 12px; }
+    .no-print { display: none; }
+  }
+</style>
+</head>
+<body>
+  <h1>⚠ ALERTAS INFORCONF</h1>
+  <div class="meta">VIZA HOME — Dpto. de Cobranzas · Emitido: ${fechaStr}</div>
+  <div class="resumen">
+    <strong>${alertas.length}</strong> cliente(s) marcado(s) en INFORCONF sin cuota pendiente activa en el sistema.
+    Verificar si dejaron de figurar en el Excel importado o si ya fueron regularizados.
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Código</th>
+        <th>Cliente</th>
+        <th>CI</th>
+        <th>Teléfono</th>
+        <th>Localidad</th>
+        <th>Sucursal</th>
+        <th>Vendedor</th>
+        <th>Judicial</th>
+        <th>Últ. Notif.</th>
+      </tr>
+    </thead>
+    <tbody>${filas || '<tr><td colspan="10" style="text-align:center;padding:20px">Sin alertas.</td></tr>'}</tbody>
+  </table>
+  <div class="footer">Caetutti Protocol — Reporte generado automáticamente · Página 1 de 1</div>
+  <script>window.onload = () => { setTimeout(() => window.print(), 300); };</script>
+</body>
+</html>`;
+
+    const w = window.open("", "_blank");
+    if (!w) {
+      toast.error("El navegador bloqueó la ventana. Permití pop-ups para este sitio.");
+      return;
+    }
+    w.document.write(html);
+    w.document.close();
+  };
+
+  if (isLoading) return null;
+  if (alertas.length === 0) return null;
+
+  return (
+    <Card className="glass-card border-amber-500/40 bg-amber-500/5">
+      <CardContent className="p-3">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <div>
+              <p className="text-sm font-semibold text-amber-400">
+                Alertas INFORCONF: {alertas.length} cliente(s)
+              </p>
+              <p className="text-[10px] text-muted-foreground">
+                Marcados en INFORCONF sin cuota pendiente activa. Verificar si dejaron de figurar en el Excel.
+              </p>
+            </div>
+          </div>
+          <Button size="sm" variant="outline" onClick={exportarPDF}
+            className="border-amber-500/40 text-amber-400 hover:bg-amber-500/10">
+            <FileText className="w-3.5 h-3.5 mr-1" />
+            Exportar PDF / Imprimir
+          </Button>
+        </div>
+        <div className="mt-2 max-h-32 overflow-y-auto text-xs">
+          <table className="w-full">
+            <thead className="text-[9px] text-muted-foreground uppercase">
+              <tr>
+                <th className="text-left py-1">Código</th>
+                <th className="text-left py-1">Cliente</th>
+                <th className="text-left py-1">Sucursal</th>
+                <th className="text-left py-1">Últ. Notif.</th>
+              </tr>
+            </thead>
+            <tbody>
+              {alertas.slice(0, 10).map((a) => (
+                <tr key={a.id} className="border-t border-border/20">
+                  <td className="py-1 font-mono text-[10px]">{a.codigoEntidad}</td>
+                  <td className="py-1">{a.entidad}</td>
+                  <td className="py-1 text-muted-foreground">{a.sucursal}</td>
+                  <td className="py-1 text-muted-foreground">{a.ultimaNotificacion ? fmtRelative(a.ultimaNotificacion) : "—"}</td>
+                </tr>
+              ))}
+              {alertas.length > 10 && (
+                <tr><td colSpan={4} className="py-1 text-[10px] text-muted-foreground italic">+ {alertas.length - 10} más… exportá el PDF para ver todos.</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

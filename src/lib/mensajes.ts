@@ -32,6 +32,11 @@ export function varsCliente(cliente: any, totalGs: number, cantidadCuotas: numbe
     "Cantidad Cuotas": cantidadCuotas, // disponible pero NO se incluye por defecto
     "Vendedor": cliente.vendedor || "",
     "Sucursal": cliente.sucursal?.nombre || "",
+    // 🛠️ Flag INFORCONF para usar en plantillas con {Informconf Alerta}
+    "Informconf Alerta": cliente.informconf === "S"
+      ? "⚠ AVISO: Su cuenta figura en INFORCONF. Regularice urgentemente para evitar acciones legales."
+      : "",
+    "Informconf": cliente.informconf === "S" ? "Sí" : "No",
   };
 }
 
@@ -144,7 +149,12 @@ export async function generarMensajeAgrupado(
   }
 
   // Componer mensaje final
-  const partes = [cabecera, detalles];
+  // 🛠️ Si el cliente está en INFORCONF, insertar aviso después de la cabecera
+  const partes = [cabecera];
+  if (cliente.informconf === "S") {
+    partes.push("⚠ AVISO: Su cuenta figura en INFORCONF. Regularice urgentemente para evitar acciones legales.");
+  }
+  partes.push(detalles);
   if (pie) partes.push(pie);
   return partes.join("\n\n");
 }
@@ -206,7 +216,14 @@ export async function generarMensajeCodeudor(
     pie = template.pieEstatico || "";
   }
 
-  const partes = [cabecera, detalles];
+  // 🛠️ Si el titular está en INFORCONF, insertar aviso después de la cabecera
+  // (informconf viene del codeudorData que manda el route, copiado del titular)
+  const titularInformconf = (codeudor as any)?.informconf || (cuotas[0] as any)?.cliente?.informconf || "N";
+  const partes = [cabecera];
+  if (titularInformconf === "S") {
+    partes.push("⚠ AVISO: La cuenta del titular figura en INFORCONF. Regularice urgentemente para evitar acciones legales.");
+  }
+  partes.push(detalles);
   if (pie) partes.push(pie);
   return partes.join("\n\n");
 }
