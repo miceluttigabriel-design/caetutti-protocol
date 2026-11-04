@@ -8,10 +8,8 @@ export const maxDuration = 60;
 /**
  * POST /api/admin/seed-pie-mora
  *
- * Crea/actualiza las reglas tipo PIE para CLIENTE y CODEUDOR con el nuevo
- * enfoque: NO mencionamos el monto de interés (porque no cuadra con el Excel),
- * solo indicamos que el cliente debe CONSULTAR el interés por mora con su
- * gestor en línea antes de abonar.
+ * Crea/actualiza las reglas tipo PIE para CLIENTE y CODEUDOR con el enfoque
+ * de que el cliente consulte el interés por mora con su gestor en línea.
  *
  * Tono gradual: amable → cordial → firme → estricto → severo → judicial.
  * Todos los pies terminan con la indicación de consultar el interés mora.
@@ -251,7 +249,7 @@ export async function POST(req: NextRequest) {
       data: {
         empresaId: user.empresaId,
         nombre: r.nombre,
-        diasVcto: r.diasMinPie, // campo legacy, usamos diasMinPie/diasMaxPie
+        diasVcto: r.diasMinPie,
         mensaje: r.mensaje,
         activa: true,
         cooldownDias: 0,

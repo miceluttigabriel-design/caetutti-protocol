@@ -142,7 +142,16 @@ export async function generarMensajeAgrupado(
   // 3. Pie dinámico o estático
   let pie = "";
   if (template.usarReglasDinamicas) {
-    pie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente") || template.pieEstatico || "";
+    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente") || template.pieEstatico || "";
+    // 🛠️ FIX: sustituir las variables del pie (como {dias_absolutos}) con la info
+    // del cliente + la cuota con mayor atraso.
+    const cuotaMayorAtraso = cuotas.reduce((max, q) =>
+      ((q.diasAtrasado ?? 0) > (max.diasAtrasado ?? 0)) ? q : max, cuotas[0] || {});
+    const varsPie = {
+      ...varsCliente(cliente, totalGs, cuotas.length),
+      ...varsCuota(cuotaMayorAtraso),
+    };
+    pie = sustituirVariables(pieMsg, varsPie);
   } else {
     pie = template.pieEstatico || "";
   }
@@ -202,7 +211,20 @@ export async function generarMensajeCodeudor(
   // Pie
   let pie = "";
   if (template.usarReglasDinamicas) {
-    pie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor") || template.pieEstatico || "";
+    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor") || template.pieEstatico || "";
+    // 🛠️ FIX: sustituir las variables del pie (como {dias_absolutos}, {Entidad}, etc.)
+    // con la info del codeudor + la cuota con mayor atraso. Sin esto, las reglas
+    // con {dias_absolutos} mostraban literalmente "{dias_absolutos}" en el mensaje.
+    const cuotaMayorAtraso = cuotas.reduce((max, q) =>
+      ((q.diasAtrasado ?? 0) > (max.diasAtrasado ?? 0)) ? q : max, cuotas[0] || {});
+    const varsPie = {
+      ...varsCliente(codeudor, totalGs, cuotas.length),
+      ...varsCuota(cuotaMayorAtraso),
+      // Para codeudor, {Entidad} en el pie = cliente deudor (titular), no el codeudor
+      "Entidad": (cuotaMayorAtraso as any)?.cliente?.entidad || (codeudor as any)?.entidad || "",
+      "Codigo Entidad": (cuotaMayorAtraso as any)?.cliente?.codigoEntidad || (codeudor as any)?.codigoEntidad || "",
+    };
+    pie = sustituirVariables(pieMsg, varsPie);
   } else {
     pie = template.pieEstatico || "";
   }
