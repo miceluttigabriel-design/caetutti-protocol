@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,38 +10,27 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2, FileText } from "lucide-react";
-import { fmtGs, fmtPhone, fmtRelative, fmtDateTime, fmtDate } from "@/lib/format";
+import { Search, Plus, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2, FileText } from "lucide-react";
+import { fmtGs, fmtPhone, fmtRelative, fmtDateTime } from "@/lib/format";
 import { toast } from "sonner";
 
-const POR_PAGINA = 50;
-
-export function ClientesModule({ sucursal }: { sucursal: string }) {
+export function ClientesModule() {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
-  const [pagina, setPagina] = useState(1);
   const [editing, setEditing] = useState<any | null>(null);
   const [viewing, setViewing] = useState<any | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
 
-  const { data, isLoading, isFetching } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ["clientes"],
     queryFn: async () => {
       const r = await fetch("/api/clientes");
       if (!r.ok) throw new Error();
       return r.json();
     },
-    // ⚡ Cache de 5 minutos: cambiar de pestaña NO recarga todo de nuevo.
-    //    Si otro módulo guarda cambios, invalida el cache y se refresca solo.
-    staleTime: 5 * 60 * 1000,
-    refetchOnWindowFocus: false,
   });
 
-  // Al cambiar la sucursal global (barra superior), volver a la página 1
-  useEffect(() => { setPagina(1); }, [sucursal]);
-
-  // Filtro por sucursal (selector global de la barra superior) + búsqueda
   const clientes = (data?.clientes || []).filter((c: any) => {
-    if (sucursal !== "__TODAS__" && c.sucursalId !== sucursal) return false;
     const q = search.toLowerCase();
     return !q
       || c.entidad?.toLowerCase().includes(q)
@@ -49,12 +38,6 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
       || c.telefono?.includes(q)
       || c.localidad?.toLowerCase().includes(q);
   });
-
-  // ⚡ Paginación del lado del cliente: la BD ya respondió todo,
-  //    solo dibujamos 50 filas por página para que el navegador vuele.
-  const totalPaginas = Math.max(1, Math.ceil(clientes.length / POR_PAGINA));
-  const paginaActual = Math.min(pagina, totalPaginas);
-  const visibles = clientes.slice((paginaActual - 1) * POR_PAGINA, paginaActual * POR_PAGINA);
 
   return (
     <div className="space-y-4">
@@ -65,17 +48,14 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
           <Input
             placeholder="Buscar por nombre, código, teléfono, localidad…"
             value={search}
-            onChange={(e) => { setSearch(e.target.value); setPagina(1); }}
+            onChange={(e) => setSearch(e.target.value)}
             className="pl-9 glass-card"
           />
         </div>
-        {isFetching && !isLoading && (
-          <span className="self-center text-xs text-muted-foreground animate-pulse">actualizando…</span>
-        )}
+        <Button onClick={() => setShowCreate(true)} className="glow-primary">
+          <Plus className="w-4 h-4 mr-2" /> Nuevo Cliente
+        </Button>
       </div>
-
-      {/* === Panel Alertas INFORCONF (clientes marcados sin cuota pendiente) === */}
-      <AlertasInforconf sucursal={sucursal} />
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -84,6 +64,9 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
         <MiniStat label="Sin teléfono" value={String(clientes.filter((c: any) => !c.telefono).length)} accent="text-amber-400" />
         <MiniStat label="Judicial" value={String(clientes.filter((c: any) => c.judicial === "S").length)} accent="text-red-400" />
       </div>
+
+      {/* === Reporte de Exclusiones INFORCONF (debajo del titular) === */}
+      <ReporteExclusionesInforconf />
 
       {/* Table */}
       <Card className="glass-card overflow-hidden">
@@ -95,7 +78,7 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Teléfono</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Sucursal</th>
                 <th className="text-right px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Saldo</th>
-                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">INFORCONF</th>
+                <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Cuotas</th>
                 <th className="text-left px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Notificado</th>
                 <th className="text-center px-3 py-2.5 font-medium text-muted-foreground text-xs uppercase tracking-wider">Acciones</th>
               </tr>
@@ -109,7 +92,7 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
               {!isLoading && clientes.length === 0 && (
                 <tr><td colSpan={7} className="text-center py-10 text-muted-foreground text-sm">No hay clientes que coincidan con la búsqueda.</td></tr>
               )}
-              {!isLoading && visibles.map((c: any) => (
+              {!isLoading && clientes.map((c: any) => (
                 <tr key={c.id} className={`border-b border-border/20 hover:bg-secondary/30 transition-colors ${c.notificado ? "opacity-50" : ""}`}>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center gap-2">
@@ -136,33 +119,7 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
                     <span className="font-semibold text-amber-400">{fmtGs(c.saldoTotal)}</span>
                   </td>
                   <td className="px-3 py-2.5 text-center">
-                    <button
-                      title={c.informconf === "S" ? "En INFORCONF — click para quitar" : "No está en INFORCONF — click para marcar"}
-                      onClick={async () => {
-                        const nuevo = c.informconf === "S" ? "N" : "S";
-                        try {
-                          const r = await fetch(`/api/clientes/${c.id}`, {
-                            method: "PUT",
-                            headers: { "Content-Type": "application/json" },
-                            body: JSON.stringify({ informconf: nuevo }),
-                          });
-                          if (!r.ok) throw new Error();
-                          // Actualizar el cliente en el estado local para feedback inmediato
-                          c.informconf = nuevo;
-                          qc.invalidateQueries({ queryKey: ["clientes"] });
-                          toast.success(nuevo === "S" ? "Marcado en INFORCONF" : "Desmarcado INFORCONF");
-                        } catch {
-                          toast.error("Error al actualizar");
-                        }
-                      }}
-                      className={`inline-flex items-center justify-center w-7 h-7 rounded-md border text-xs font-bold transition-all ${
-                        c.informconf === "S"
-                          ? "bg-amber-500/20 border-amber-500/50 text-amber-400 hover:bg-amber-500/30"
-                          : "bg-secondary/30 border-border/40 text-muted-foreground hover:bg-secondary/60"
-                      }`}
-                    >
-                      {c.informconf === "S" ? "Sí" : "No"}
-                    </button>
+                    <Badge variant="secondary" className="text-xs">{c.cuotasPendientes}</Badge>
                   </td>
                   <td className="px-3 py-2.5">
                     {c.notificado && c.ultimaNotificacion ? (
@@ -197,26 +154,6 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
             </tbody>
           </table>
         </div>
-
-        {/* ⚡ Paginador */}
-        {!isLoading && clientes.length > 0 && (
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-2 px-3 py-2 border-t border-border/40 bg-secondary/20">
-            <p className="text-xs text-muted-foreground">
-              Mostrando {(paginaActual - 1) * POR_PAGINA + 1}–{Math.min(paginaActual * POR_PAGINA, clientes.length)} de {clientes.length} clientes
-            </p>
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={paginaActual <= 1} onClick={() => setPagina(paginaActual - 1)}>
-                ‹ Anterior
-              </Button>
-              <span className="text-xs text-muted-foreground px-2">
-                Página {paginaActual} de {totalPaginas}
-              </span>
-              <Button variant="outline" size="sm" className="h-7 text-xs px-2" disabled={paginaActual >= totalPaginas} onClick={() => setPagina(paginaActual + 1)}>
-                Siguiente ›
-              </Button>
-            </div>
-          </div>
-        )}
       </Card>
 
       {/* Edit dialog */}
@@ -225,6 +162,14 @@ export function ClientesModule({ sucursal }: { sucursal: string }) {
           cliente={editing}
           onClose={() => setEditing(null)}
           onSaved={() => { qc.invalidateQueries({ queryKey: ["clientes"] }); setEditing(null); }}
+        />
+      )}
+
+      {/* Create dialog */}
+      {showCreate && (
+        <ClienteDialog
+          onClose={() => setShowCreate(false)}
+          onSaved={() => { qc.invalidateQueries({ queryKey: ["clientes"] }); setShowCreate(false); }}
         />
       )}
 
@@ -320,17 +265,16 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
 
   const save = useMutation({
     mutationFn: async () => {
-      // Solo edición: el alta de clientes se hace automáticamente
-      // al registrar un codeudor desde la pestaña Notificaciones.
-      const r = await fetch(`/api/clientes/${cliente.id}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
+      const url = cliente ? `/api/clientes/${cliente.id}` : "/api/clientes";
+      const method = cliente ? "PUT" : "POST";
+      const r = await fetch(url, {
+        method, headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
       if (!r.ok) throw new Error((await r.json()).error || "Error");
       return r.json();
     },
-    onSuccess: () => { toast.success("Cliente actualizado"); onSaved(); },
+    onSuccess: () => { toast.success(cliente ? "Cliente actualizado" : "Cliente creado"); onSaved(); },
     onError: (e: any) => toast.error(e.message),
   });
 
@@ -338,11 +282,11 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
     <Dialog open onOpenChange={onClose}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Editar Cliente</DialogTitle>
+          <DialogTitle>{cliente ? "Editar Cliente" : "Nuevo Cliente"}</DialogTitle>
         </DialogHeader>
         <div className="grid grid-cols-2 gap-3 max-h-[60vh] overflow-y-auto">
-          <Field label="Código Entidad">
-            <Input value={form.codigoEntidad} onChange={(e) => setForm({...form, codigoEntidad: e.target.value})} disabled />
+          <Field label="Código Entidad *">
+            <Input value={form.codigoEntidad} onChange={(e) => setForm({...form, codigoEntidad: e.target.value})} disabled={!!cliente} />
           </Field>
           <Field label="Nombre / Entidad *">
             <Input value={form.entidad} onChange={(e) => setForm({...form, entidad: e.target.value})} />
@@ -447,7 +391,7 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
         )}
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>Cancelar</Button>
-          <Button onClick={() => save.mutate()} disabled={save.isPending || !form.entidad}>
+          <Button onClick={() => save.mutate()} disabled={save.isPending || !form.codigoEntidad || !form.entidad}>
             {save.isPending ? "Guardando…" : "Guardar"}
           </Button>
         </DialogFooter>
@@ -536,7 +480,7 @@ function ClienteDetalle({ cliente, onClose }: { cliente: any; onClose: () => voi
                         )}
                       </p>
                       <p className="text-[10px] text-muted-foreground">
-                        Vence: {fmtDate(q.fechaVcto)}
+                        Vence: {new Date(q.fechaVcto).toLocaleDateString("es-PY")}
                         {q.notificado && q.ultimaNotificacion && (
                           <span className="ml-1.5 text-emerald-400" title={fmtDateTime(q.ultimaNotificacion)}>
                             · notif. {fmtRelative(q.ultimaNotificacion)}
@@ -569,41 +513,58 @@ function DetailRow({ label, value, highlight }: { label: string; value: string; 
 }
 
 // ============================================================
-// PANEL: ALERTAS INFORCONF
-// Clientes marcados en INFORCONF="S" SIN cuotas pendientes.
-// Genera alerta + reporte imprimible / PDF.
+// REPORTE: EXCLUSIONES DE MOROSIDADES (INFORCONF)
+// Lista titulares y codeudores marcados INFORCONF="S" sin deuda activa.
+// Botón "Exportar PDF / Imprimir" para imprimir el reporte.
 // ============================================================
 
-function AlertasInforconf({ sucursal }: { sucursal: string }) {
+function ReporteExclusionesInforconf() {
   const { data, isLoading } = useQuery({
-    queryKey: ["inforconf-alertas", sucursal],
+    queryKey: ["inforconf-exclusiones"],
     queryFn: async () => {
-      const r = await fetch(`/api/inforconf/alertas?sucursal=${encodeURIComponent(sucursal)}`);
+      const r = await fetch("/api/inforconf/exclusiones");
       if (!r.ok) throw new Error();
       return r.json();
     },
   });
 
-  const alertas: any[] = data?.alertas || [];
+  if (isLoading) return null;
+  const titulares: any[] = data?.titulares || [];
+  const codeudores: any[] = data?.codeudores || [];
+  const total = (data?.totalTitulares || 0) + (data?.totalCodeudores || 0);
+  if (total === 0) return null;
 
   // === EXPORTAR / IMPRIMIR PDF ===
-  // Abre una ventana nueva con HTML limpio + window.print() → el usuario
-  // puede guardar como PDF o imprimir directo. No requiere libs externas.
   const exportarPDF = () => {
     const hoy = new Date();
     const fechaStr = hoy.toLocaleDateString("es-PY") + " " + hoy.toLocaleTimeString("es-PY");
-    const filas = alertas.map((a, i) => `
+
+    const filasTitulares = titulares.map((t, i) => `
       <tr>
         <td>${i + 1}</td>
-        <td>${a.codigoEntidad || "—"}</td>
-        <td>${a.entidad || "—"}</td>
-        <td>${a.ciEntidad || "—"}</td>
-        <td>${a.telefono || "—"}</td>
-        <td>${a.localidad || "—"}</td>
-        <td>${a.sucursal || "—"}</td>
-        <td>${a.vendedor || "—"}</td>
-        <td>${a.judicial ? "Sí" : "No"}</td>
-        <td>${a.ultimaNotificacion ? new Date(a.ultimaNotificacion).toLocaleDateString("es-PY") : "—"}</td>
+        <td>${t.codigoEntidad || "—"}</td>
+        <td>${t.entidad || "—"}</td>
+        <td>${t.ciEntidad || "—"}</td>
+        <td>${t.telefono || "—"}</td>
+        <td>${t.localidad || "—"}</td>
+        <td>${t.sucursal || "—"}</td>
+        <td>${t.vendedor || "—"}</td>
+        <td>${t.judicial ? "Sí" : "No"}</td>
+        <td>${t.ultimaNotificacion ? new Date(t.ultimaNotificacion).toLocaleDateString("es-PY") : "—"}</td>
+      </tr>
+    `).join("");
+
+    const filasCodeudores = codeudores.map((c, i) => `
+      <tr>
+        <td>${i + 1}</td>
+        <td>${c.titularCodigo || "—"}</td>
+        <td>${c.titularEntidad || "—"}</td>
+        <td>${c.codeudorNombre || "—"}</td>
+        <td>${c.codeudorTelefono || "—"}</td>
+        <td>${c.codeudorCi || "—"}</td>
+        <td>${c.codeudorParentesco || "—"}</td>
+        <td>${c.sucursal || "—"}</td>
+        <td>${c.titularSinDeuda ? "Sí" : "No"}</td>
       </tr>
     `).join("");
 
@@ -611,50 +572,54 @@ function AlertasInforconf({ sucursal }: { sucursal: string }) {
 <html lang="es">
 <head>
 <meta charset="utf-8">
-<title>Alertas INFORCONF — ${fechaStr}</title>
+<title>Exclusiones de Morosidades INFORCONF — ${fechaStr}</title>
 <style>
   * { font-family: 'Liberation Sans', Arial, sans-serif; box-sizing: border-box; }
   body { margin: 24px; color: #111; font-size: 11px; }
   h1 { color: #b91c1c; font-size: 18px; margin: 0 0 4px; }
+  h2 { color: #b91c1c; font-size: 14px; margin: 20px 0 8px; border-bottom: 2px solid #b91c1c; padding-bottom: 4px; }
   .meta { color: #555; font-size: 10px; margin-bottom: 16px; }
   .resumen { background: #fef3c7; border: 1px solid #fbbf24; padding: 8px 12px; border-radius: 4px; margin-bottom: 16px; font-size: 11px; }
   .resumen strong { color: #b91c1c; }
-  table { width: 100%; border-collapse: collapse; }
+  table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
   th { background: #b91c1c; color: white; padding: 6px 4px; text-align: left; font-size: 10px; text-transform: uppercase; }
   td { padding: 5px 4px; border-bottom: 1px solid #ddd; font-size: 10px; }
   tr:nth-child(even) td { background: #f9fafb; }
-  .footer { margin-top: 20px; font-size: 9px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
-  @media print {
-    body { margin: 12px; }
-    .no-print { display: none; }
-  }
+  .footer { margin-top: 30px; font-size: 9px; color: #888; text-align: center; border-top: 1px solid #ddd; padding-top: 8px; }
+  @media print { body { margin: 12px; } }
 </style>
 </head>
 <body>
-  <h1>⚠ ALERTAS INFORCONF</h1>
+  <h1>⚠ EXCLUSIONES DE MOROSIDADES — INFORCONF</h1>
   <div class="meta">VIZA HOME — Dpto. de Cobranzas · Emitido: ${fechaStr}</div>
   <div class="resumen">
-    <strong>${alertas.length}</strong> cliente(s) marcado(s) en INFORCONF sin cuota pendiente activa en el sistema.
-    Verificar si dejaron de figurar en el Excel importado o si ya fueron regularizados.
+    <strong>${titulares.length}</strong> titular(es) y <strong>${codeudores.length}</strong> codeudor(es) marcados en INFORCONF sin deuda activa.
+    Verificar si fueron regularizados para quitar el flag INFORCONF.
   </div>
+
+  <h2>TITULARES — ${titulares.length} registro(s)</h2>
   <table>
     <thead>
       <tr>
-        <th>#</th>
-        <th>Código</th>
-        <th>Cliente</th>
-        <th>CI</th>
-        <th>Teléfono</th>
-        <th>Localidad</th>
-        <th>Sucursal</th>
-        <th>Vendedor</th>
-        <th>Judicial</th>
-        <th>Últ. Notif.</th>
+        <th>#</th><th>Código</th><th>Cliente</th><th>CI</th><th>Teléfono</th>
+        <th>Localidad</th><th>Sucursal</th><th>Vendedor</th><th>Judicial</th><th>Últ. Notif.</th>
       </tr>
     </thead>
-    <tbody>${filas || '<tr><td colspan="10" style="text-align:center;padding:20px">Sin alertas.</td></tr>'}</tbody>
+    <tbody>${filasTitulares || '<tr><td colspan="10" style="text-align:center;padding:20px">Sin titulares.</td></tr>'}</tbody>
   </table>
-  <div class="footer">Caetutti Protocol — Reporte generado automáticamente · Página 1 de 1</div>
+
+  <h2>CODEUDORES — ${codeudores.length} registro(s)</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th><th>Cód. Titular</th><th>Titular</th><th>Codeudor</th><th>Teléfono</th>
+        <th>CI Codeudor</th><th>Parentesco</th><th>Sucursal</th><th>Titular sin deuda</th>
+      </tr>
+    </thead>
+    <tbody>${filasCodeudores || '<tr><td colspan="9" style="text-align:center;padding:20px">Sin codeudores.</td></tr>'}</tbody>
+  </table>
+
+  <div class="footer">Caetutti Protocol — Reporte de Exclusiones INFORCONF · Generado automáticamente</div>
   <script>window.onload = () => { setTimeout(() => window.print(), 300); };</script>
 </body>
 </html>`;
@@ -668,21 +633,18 @@ function AlertasInforconf({ sucursal }: { sucursal: string }) {
     w.document.close();
   };
 
-  if (isLoading) return null;
-  if (alertas.length === 0) return null;
-
   return (
     <Card className="glass-card border-amber-500/40 bg-amber-500/5">
       <CardContent className="p-3">
         <div className="flex items-center justify-between gap-3 flex-wrap">
           <div className="flex items-center gap-2">
-            <AlertTriangle className="w-4 h-4 text-amber-400" />
+            <ShieldAlert className="w-4 h-4 text-amber-400" />
             <div>
               <p className="text-sm font-semibold text-amber-400">
-                Alertas INFORCONF: {alertas.length} cliente(s)
+                Exclusiones INFORCONF: {titulares.length} titular(es) + {codeudores.length} codeudor(es)
               </p>
               <p className="text-[10px] text-muted-foreground">
-                Marcados en INFORCONF sin cuota pendiente activa. Verificar si dejaron de figurar en el Excel.
+                Marcados en INFORCONF sin deuda activa. Verificar para quitar el flag y excluir de morosidades.
               </p>
             </div>
           </div>
@@ -691,31 +653,6 @@ function AlertasInforconf({ sucursal }: { sucursal: string }) {
             <FileText className="w-3.5 h-3.5 mr-1" />
             Exportar PDF / Imprimir
           </Button>
-        </div>
-        <div className="mt-2 max-h-32 overflow-y-auto text-xs">
-          <table className="w-full">
-            <thead className="text-[9px] text-muted-foreground uppercase">
-              <tr>
-                <th className="text-left py-1">Código</th>
-                <th className="text-left py-1">Cliente</th>
-                <th className="text-left py-1">Sucursal</th>
-                <th className="text-left py-1">Últ. Notif.</th>
-              </tr>
-            </thead>
-            <tbody>
-              {alertas.slice(0, 10).map((a) => (
-                <tr key={a.id} className="border-t border-border/20">
-                  <td className="py-1 font-mono text-[10px]">{a.codigoEntidad}</td>
-                  <td className="py-1">{a.entidad}</td>
-                  <td className="py-1 text-muted-foreground">{a.sucursal}</td>
-                  <td className="py-1 text-muted-foreground">{a.ultimaNotificacion ? fmtRelative(a.ultimaNotificacion) : "—"}</td>
-                </tr>
-              ))}
-              {alertas.length > 10 && (
-                <tr><td colSpan={4} className="py-1 text-[10px] text-muted-foreground italic">+ {alertas.length - 10} más… exportá el PDF para ver todos.</td></tr>
-              )}
-            </tbody>
-          </table>
         </div>
       </CardContent>
     </Card>

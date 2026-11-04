@@ -158,20 +158,32 @@ async function importRows(empresaId: string, rows: any[]) {
         return s;
       };
 
-      const clienteData = {
+      // 🛠️ FIX: Datos crudos del Excel. Los campos que el usuario edita manualmente
+      // (telefono, telefonoPivot, informconf, judicial, codeudor*) NO se sobrescriben
+      // si el Excel los trae vacíos. Solo se actualizan si el Excel trae un valor real.
+      const telefonoExcel = normalizarTelefonoPY(String(row["Telefono"] ?? row["telefono"] ?? "").trim());
+      const telefonoPivotExcel = normalizarTelefonoPY(String(row["Telefono_pivot"] ?? row["Telefono pivot"] ?? "").trim());
+      const informconfExcel = parseSiNo(String(row["Informconf"] ?? "").trim());
+      const judicialExcel = parseSiNo(String(row["Judicial"] ?? "").trim());
+
+      const clienteData: any = {
         entidad,
         ciEntidad: limpiar(row["Ci Entidad"] ?? row["ciEntidad"]),
         rucEntidad: limpiar(row["Ruc Entidad"] ?? row["rucEntidad"]),
         localidad: limpiar(row["Localidad"] ?? row["localidad"]),
-        telefono: normalizarTelefonoPY(String(row["Telefono"] ?? row["telefono"] ?? "").trim()),
-        telefonoPivot: normalizarTelefonoPY(String(row["Telefono_pivot"] ?? row["Telefono pivot"] ?? "").trim()) || null,
         vendedor,
         cobrador: limpiar(row["Cobrador"] ?? row["cobrador"]),
-        judicial: parseSiNo(String(row["Judicial"] ?? "").trim()),
-        informconf: parseSiNo(String(row["Informconf"] ?? "").trim()),
         sucursalId: sucursal.id,
         estadoRegistro: "completo",
       };
+      // 🛠️ Solo agregar telefono/telefonoPivot si el Excel los trae (no vacíos)
+      // → así NO se sobrescribe un teléfono editado manualmente con null/vacío.
+      if (telefonoExcel) clienteData.telefono = telefonoExcel;
+      if (telefonoPivotExcel) clienteData.telefonoPivot = telefonoPivotExcel;
+      // 🛠️ Solo actualizar informconf/judicial si el Excel los trae como "S"
+      // → si el Excel trae "N" o vacío, NO sobrescribir (preservar marca manual).
+      if (informconfExcel === "S") clienteData.informconf = "S";
+      if (judicialExcel === "S") clienteData.judicial = "S";
 
       let clienteId = clienteCache.get(codigoEntidad);
       if (!clienteId) {
@@ -276,15 +288,27 @@ async function importStructured(empresaId: string, clientes: any[]) {
         where: { empresaId_codigoEntidad: { empresaId, codigoEntidad: String(c.codigoEntidad) } },
       });
       if (cliente) {
+        // 🛠️ FIX: No sobrescribir telefono/telefonoPivot/informconf/judicial con
+        // valores vacíos del Excel. Solo actualizar si el Excel trae un valor real.
+        const updateData: any = {
+          entidad: c.entidad,
+          ciEntidad: c.ciEntidad,
+          rucEntidad: c.rucEntidad,
+          localidad: c.localidad,
+          vendedor: c.vendedor,
+          cobrador: c.cobrador,
+        };
+        // Teléfonos: solo sobrescribir si el Excel los trae (no null)
+        if (c.telefono) updateData.telefono = c.telefono;
+        if (c.telefonoPivot) updateData.telefonoPivot = c.telefonoPivot;
+        // INFORCONF/Judicial: solo marcar "S" si el Excel lo trae.
+        // Si el Excel trae "N" o vacío, NO sobrescribir (preservar marca manual).
+        if (c.informconf === "S") updateData.informconf = "S";
+        if (c.judicial === "S") updateData.judicial = "S";
+
         cliente = await db.cliente.update({
           where: { id: cliente.id },
-          data: {
-            entidad: c.entidad,
-            ciEntidad: c.ciEntidad, rucEntidad: c.rucEntidad,
-            localidad: c.localidad, telefono: c.telefono, telefonoPivot: c.telefonoPivot,
-            vendedor: c.vendedor, cobrador: c.cobrador,
-            judicial: c.judicial || "N", informconf: c.informconf || "N",
-          },
+          data: updateData,
         });
         result.clientesActualizados++;
       } else {
@@ -449,17 +473,12 @@ function parseFecha(v: any): Date | null {
   if (v === "" || v === null || v === undefined) return null;
   if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
 
-  // Excel serial number — interpretarlo como fecha a medianoche LOCAL (no UTC).
-  // Antes se hacía `new Date(ms)` que crea en UTC y luego al mostrar en hora local
-  // (Paraguay UTC-3) se "corría" un día atrás (ej: 01/11 → 31/10).
-  // Ahora: extraemos Y/M/D del serial y creamos con `new Date(y, m, d)` que es local.
+  // Excel serial number
   if (typeof v === "number" && v > 30000 && v < 80000) {
-    // Excel epoch: 1900-01-01 = 1 (con bug de año bisiesto, 25569 = 1970-01-01)
+    // Excel epoch: 1900-01-01 = 1, but with leap year bug (25569 = 1970-01-01)
     const ms = (v - 25569) * 86400 * 1000;
-    const utc = new Date(ms); // UTC puro
-    // Construir fecha local usando los componentes UTC (son los "correctos" del Excel)
-    const local = new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), 0, 0, 0, 0);
-    return isNaN(local.getTime()) ? null : local;
+    const d = new Date(ms);
+    return isNaN(d.getTime()) ? null : d;
   }
 
   const s = String(v).trim();

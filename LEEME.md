@@ -1,76 +1,87 @@
-# 🎯 FIX RAÍZ: Recalcular diasAtrasado en generar-mensaje (NO confiar en frontend)
+# 🎯 FIX: Persistencia al importar + Reporte Exclusiones INFORCONF
 
-## ⭐ El bug que persistía
-BOGARIN con 1032 días (o 856 según cálculo UTC real) recibía el pie **amable**
-(0-7 días) en vez del **judicial** (181+ días).
+## ⭐ Qué se arregló (con cuidado de no perder datos)
 
-## 🔍 La causa RAÍZ (finalmente encontrada)
+### 1. Teléfonos, codeudores e INFORCONF persisten al re-importar
 
-El bug NO estaba en `seleccionarPieDinamico` ni en el `pieInteligente`.
-Estaba en **`/api/notificaciones/generar-mensaje/route.ts`**.
+**Antes**: cada vez que importabas el Excel, los campos se sobrescribían. Si el
+Excel traía teléfono vacío o INFORCONF="N", **se borraba** el teléfono editado
+manualmente y se perdía la marca INFORCONF.
 
-El route recibía las cuotas del frontend y confiaba en que `q.diasAtrasado`
-venía con el valor correcto. Pero por alguna razón (el frontend lo filtra, lo
-modifica, o no lo envía bien), `diasAtrasado` llegaba como `0` o `undefined`.
+**Ahora**:
+- **Teléfono / Teléfono alternativo**: solo se sobrescriben si el Excel los trae
+  con un valor real (no vacío). Si el Excel los trae vacíos, **se conserva** lo
+  que ya estaba guardado.
+- **INFORCONF / Judicial**: solo se marcan "S" si el Excel los trae como "S".
+  Si el Excel los trae como "N" o vacío, **NO se sobrescribe** → preserva la
+  marca manual que hiciste en el sistema.
+- **Codeudores** (codeudorNombre, codeudorTelefono, etc.): no se tocan al
+  importar (ya venían así, confirmado).
+- **Saldo, fechaVcto, etc.**: estos SÍ se actualizan con cada importación (es
+  la info financiera que cambia).
 
-Entonces en `mensajes.ts`:
-```js
-const maxDiasAtraso = Math.max(0, ...cuotas.map((q) => q.diasAtrasado ?? 0));
-// Si diasAtrasado es undefined o 0 → maxDiasAtraso = 0 → pie amable (0-7 días)
-```
+Resultado: si editás un teléfono o marcás INFORCONF="S" en el sistema, **queda
+guardado** aunque re-importes el Excel.
 
-Por eso el pie SIEMPRE salía amable, sin importar los días reales.
+### 2. Codeudores en Notificaciones siguen figurando igual
+No se modificó la API de notificaciones — los codeudores siguen apareciendo
+igual que antes. Solo se actualiza el saldo conforme a la importación.
 
-## 🛠️ La solución — Recalcular al vuelo (server-side, NO depender del frontend)
+### 3. Reporte de Exclusiones de Morosidades INFORCONF
 
-Ahora el route `/api/notificaciones/generar-mensaje` **recalcula** `diasAtrasado`
-para cada cuota, usando `fechaVcto` vs hoy (con componentes UTC para evitar
-off-by-one por zona horaria):
+Nuevo panel amarillo **abajo del titular** en la pestaña Clientes (arriba de la
+tabla) que muestra:
+- **Titulares con INFORCONF="S" sin deuda activa** (la deuda fue paga o no vino
+  en el Excel)
+- **Codeudores de titulares marcados INFORCONF="S"** (para que también les
+  saques el flag)
 
-```js
-const hoy = new Date();
-const hoyUtcMidnight = Date.UTC(hoy.getUTCFullYear(), hoy.getUTCMonth(), hoy.getUTCDate(), 0, 0, 0, 0);
-cuotasData = cuotasData.map((q) => {
-  const vcto = new Date(q.fechaVcto);
-  const vctoUtcMidnight = Date.UTC(vcto.getUTCFullYear(), vcto.getUTCMonth(), vcto.getUTCDate(), 0, 0, 0, 0);
-  const diffMs = hoyUtcMidnight - vctoUtcMidnight;
-  const diasCalculados = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
-  return { ...q, diasAtrasado: diasCalculados };  // ← FORZAR el valor recalculado
-});
-```
+Botón **"Exportar PDF / Imprimir"** que abre un reporte limpio con:
+- Encabezado "⚠ EXCLUSIONES DE MOROSIDADES — INFORCONF"
+- Resumen con totales
+- Tabla de titulares (#, Código, Cliente, CI, Teléfono, Localidad, Sucursal,
+  Vendedor, Judicial, Últ. Notif.)
+- Tabla de codeudores (#, Cód. Titular, Titular, Codeudor, Teléfono, CI
+  Codeudor, Parentesco, Sucursal, Titular sin deuda)
+- Diálogo de impresión automático → podés **Guardar como PDF** o **Imprimir**
 
-**Ya NO depende del frontend** — el server siempre calcula los días correctos.
+---
 
-## 🧪 Verificado para BOGARIN (vencimiento 07/01/2024, hoy 04/11/2026):
-- Cálculo UTC: **856 días**
-- 856 > 180 → selecciona regla **181+ días (JUDICIAL)** ✓
+## 📦 Archivos incluidos (3)
 
-> Nota: el cálculo da 856 días (no 1032 como muestra la UI). La diferencia es
-> por cómo cuenta la UI (probablemente con hora local y sin UTC). Lo importante
-> es que **856 > 180** → pie judicial correcto.
-
-## 📦 Solo 1 archivo
-- `src/app/api/notificaciones/generar-mensaje/route.ts`
+| Archivo | Qué cambia |
+|---|---|
+| `src/app/api/import/route.ts` | ⭐ NO sobrescribe telefono/informconf/judicial con valores vacíos del Excel |
+| `src/app/api/inforconf/exclusiones/route.ts` | ⭐ NUEVO: reporte de exclusiones (titulares + codeudores) |
+| `src/components/modules/clientes.tsx` | ⭐ Panel amarillo con botón Exportar PDF |
 
 ## 🔧 Cómo aplicar
-1. Copiar `src/app/api/notificaciones/generar-mensaje/route.ts` del ZIP → reemplazar el del repo
-2. GitHub Desktop → commit (ej: "fix recalc diasAtrasado en generar-mensaje") → **Push**
-3. Esperar 2-3 min el deploy
+
+1. Abrí la carpeta del repo: `C:\Users\usuario\OneDrive\Documentos\GitHub\viza-home-sistema\caetutti-protocol`
+2. Copiá la carpeta `src` de este ZIP y **reemplazá** la existente (sobrescribe 2 archivos + agrega 1 nuevo)
+3. GitHub Desktop → commit (ej: "persistencia al importar + reporte exclusiones") → **Push**
+4. Esperá 2-3 min el redeploy de Vercel
 
 ## ⚠️ No hace falta ejecutar nada en consola
-Las reglas ya están en tu BD. Este fix hace que el server calcule bien los días
-y seleccione la regla correcta.
+Este fix no requiere comandos fetch. Funciona automáticamente después del deploy.
 
 ## 🧪 Después probá
-1. Generá mensaje para **BOGARIN** (vencido hace mucho) → debe salir pie **JUDICIAL**:
-   > "NOTIFICACIÓN LEGAL: La deuda del titular que usted avala, con X días de mora..."
 
-2. Generá mensaje para un cliente con 3 días → pie **amable**
-3. Generá mensaje para un cliente con 45 días → pie **firme**
-4. Generá mensaje para un cliente con 200 días → pie **judicial**
+### Persistencia:
+1. Editá el teléfono de un titular en **Clientes** (botón Editar)
+2. Marcá INFORCONF="S" en algún cliente
+3. Re-importá el Excel (desde **Configuración → Importar Datos**)
+4. Volvé a **Clientes** → el teléfono editado y el INFORCONF="S" siguen ahí ✓
 
-Tanto para **titular** como para **codeudor** — ambos usan el mismo route que
-ahora recalcula los días. ✅
+### Reporte exclusiones:
+1. Andá a **Clientes**
+2. Si hay clientes con INFORCONF="S" sin deuda, vas a ver el panel amarillo arriba:
+   > "⚠ Exclusiones INFORCONF: X titular(es) + Y codeudor(es)"
+3. Apretá **"Exportar PDF / Imprimir"** → se abre el reporte → elegís Guardar como PDF o Imprimir
 
-✅ TypeScript: 0 errores.
-✅ Cálculo verificado: 856 días para BOGARIN → pie judicial.
+## 📝 Nota importante
+- Los codeudores en Notificaciones **siguen figurando igual** que antes (no se tocó esa API)
+- Solo se actualiza el saldo y la fechaVcto cuando re-importás (eso es lo que cambia del Excel)
+- Los INFORCONF="S" sin deuda aparecen en el reporte para que puedas quitarles el flag manualmente
+
+✅ TypeScript: 0 errores en los 3 archivos.
