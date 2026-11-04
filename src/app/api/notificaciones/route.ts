@@ -100,9 +100,9 @@ export async function GET(req: NextRequest) {
       const todasNotificadas = cuotasMapeadas.every((q) => q.notificado);
       if (ocultarNotificados && todasNotificadas) return null;
 
-      // === ORDEN DE CUOTAS DENTRO DEL CLIENTE ===
-      // 1º: las que están POR VENCER (fechaVcto >= hoy) — la más próxima primero
-      // 2º: las VENCIDAS — la más recientemente vencida primero y la más antigua (más vencida) al final
+      // === ORDEN DE CUOTAS DENTRO DEL CLIENTE (igual que antes, aprobado) ===
+      // 1º: las POR VENCER (fechaVcto >= hoy) — la más próxima primero
+      // 2º: las VENCIDAS — la más recientemente vencida primero, la más antigua al final
       const tMidnight = (d: Date | string) => {
         const x = new Date(d);
         x.setHours(0, 0, 0, 0);
@@ -160,14 +160,13 @@ export async function GET(req: NextRequest) {
     })
     .filter(Boolean)
     // === ORDENACIÓN DE LA LISTA DE CLIENTES ===
-    // 1º: los que tienen cuotas POR VENCER — ordenados por su próximo vencimiento
-    //     (el que vence mañana primero, luego +2 días, +3 días…)
-    // 2º: los que ya están todos VENCIDOS — del menos vencido al más vencido (al final)
-    // Así la lista va "de los que están para vencer hasta los más vencidos",
-    // respetando día y mes reales (no alfabético).
+    // Bloques igual que antes: POR VENCER arriba, VENCIDOS abajo (aprobado, se conserva).
+    // ⭐ ÚNICO CAMBIO: dentro de POR VENCER se ordena por FECHA de MAYOR a MENOR
+    //    (la fecha más lejana en el futuro primero; la más próxima a vencer al final
+    //     de ese bloque). Los VENCIDOS siguen igual: del menos vencido al más vencido.
     .sort((a: any, b: any) => {
       if (a.proximaVcto && b.proximaVcto) {
-        return new Date(a.proximaVcto).getTime() - new Date(b.proximaVcto).getTime();
+        return new Date(b.proximaVcto).getTime() - new Date(a.proximaVcto).getTime();
       }
       if (a.proximaVcto) return -1;
       if (b.proximaVcto) return 1;
