@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Users, CreditCard, Bell, MessageCircle, Clock, Settings, BookOpen, LogOut, X, ChevronRight, Wrench, Phone, History } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Bell, MessageCircle, Clock, Settings, BookOpen, LogOut, X, ChevronRight, Phone, History } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -25,7 +25,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: "historial", label: "Historial", icon: <History className="w-4 h-4" />, permiso: "ver_historial", group: "Notificaciones" },
   { id: "clientes", label: "Clientes", icon: <Users className="w-4 h-4" />, permiso: "ver_clientes", group: "Negocio" },
   { id: "cuotas", label: "Deudas", icon: <CreditCard className="w-4 h-4" />, permiso: "ver_cuotas", group: "Negocio" },
-  { id: "mantenimiento-cuotas", label: "Mantenimiento", icon: <Wrench className="w-4 h-4" />, permiso: "ver_mantenimiento_cuotas", group: "Negocio" },
+  // "Mantenimiento" (mantenimiento-cuotas) eliminado del menú — no hace falta.
+  // El módulo sigue en el código pero ya no es accesible desde el sidebar.
   { id: "reglas", label: "Reglas", icon: <BookOpen className="w-4 h-4" />, permiso: "ver_reglas", group: "Configuración" },
   { id: "configuracion", label: "Configuración", icon: <Settings className="w-4 h-4" />, permiso: "ver_configuracion", group: "Configuración" },
 ];
