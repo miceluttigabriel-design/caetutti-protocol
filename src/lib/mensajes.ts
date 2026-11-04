@@ -38,10 +38,11 @@ export function varsCliente(cliente: any, totalGs: number, cantidadCuotas: numbe
 // Para detalle (info de cada cuota)
 export function varsCuota(cuota: any): Record<string, string | number> {
   const dias = cuota.diasAtrasado ?? 0;
+  // 🛠️ FIX: usamos saldoGs directo (no saldoTotalGs) — no trabajamos con interés.
   return {
-    "Fecha Vcto": cuota.fechaVcto ? new Date(cuota.fechaVcto).toLocaleDateString("es-PY") : "",
-    "Fecha Emision": cuota.fechaEmision ? new Date(cuota.fechaEmision).toLocaleDateString("es-PY") : "",
-    "Saldo en Gs": new Intl.NumberFormat("es-PY").format(cuota.saldoTotalGs || cuota.saldoGs || 0),
+    "Fecha Vcto": cuota.fechaVcto ? `${String(new Date(cuota.fechaVcto).getUTCDate()).padStart(2, "0")}/${String(new Date(cuota.fechaVcto).getUTCMonth() + 1).padStart(2, "0")}/${new Date(cuota.fechaVcto).getUTCFullYear()}` : "",
+    "Fecha Emision": cuota.fechaEmision ? `${String(new Date(cuota.fechaEmision).getUTCDate()).padStart(2, "0")}/${String(new Date(cuota.fechaEmision).getUTCMonth() + 1).padStart(2, "0")}/${new Date(cuota.fechaEmision).getUTCFullYear()}` : "",
+    "Saldo en Gs": new Intl.NumberFormat("es-PY").format(cuota.saldoGs || 0),
     "Saldo Guarani": new Intl.NumberFormat("es-PY").format(cuota.saldoGuarani || 0),
     "Saldo Dolar": new Intl.NumberFormat("es-PY").format(cuota.saldoDolar || 0),
     "Venc Mes": new Intl.NumberFormat("es-PY").format(cuota.vencMes || cuota.saldoGs || 0),
@@ -110,7 +111,7 @@ export async function generarMensajeAgrupado(
         empresaId,
         cabecera: "Estimado/a {Entidad}, le informamos que tiene cuotas pendientes por un total de ₲ {Total Gs}.",
         detalle: "- Vence: {Fecha Vcto} · Saldo: ₲ {Saldo en Gs} · {dias_texto}",
-        pieEstatico: "Comuníquese al 021 123 456 para regularizar. Gracias.",
+        pieEstatico: "Verifique el valor de su interés mora para poder abonar su cuenta. Consulte ahora mismo con su gestor en línea.",
         usarReglasDinamicas: true,
       },
     });
@@ -168,7 +169,7 @@ export async function generarMensajeCodeudor(
         empresaId,
         cabecera: "Estimado/a codeudor, le informamos que el cliente {Entidad} tiene cuotas pendientes por un total de ₲ {Total Gs}.",
         detalle: "- Vence: {Fecha Vcto} · Saldo: ₲ {Saldo en Gs} · {dias_texto}",
-        pieEstatico: "Le solicitamos gestionar el pago. Gracias.",
+        pieEstatico: "Verifique el valor de su interés mora para poder abonar su cuenta. Consulte ahora mismo con su gestor en línea.",
         usarReglasDinamicas: true,
       },
     });

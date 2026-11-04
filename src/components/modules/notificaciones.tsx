@@ -352,11 +352,6 @@ function NotifCard({ cliente, onView }: {
         </div>
         <div className="text-right shrink-0">
           <p className="text-lg font-bold text-amber-400">{fmtGs(cliente.totalGs)}</p>
-          {cliente.totalInteres > 0 && (
-            <p className="text-[9px] text-orange-400/70">
-              +{fmtGs(cliente.totalInteres)} interés
-            </p>
-          )}
         </div>
         <div className="flex flex-col gap-1 shrink-0">
           <Button variant="ghost" size="sm" onClick={onView} className="h-7 text-xs">
@@ -678,12 +673,6 @@ function NotifDetalle({ cliente, modo, onClose }: { cliente: any; modo: string; 
             <Row label="Teléfono" value={fmtPhone(modo === "codeudor" ? cliente.codeudor?.telefono : cliente.telefono)} />
             <Row label="Sucursal" value={cliente.sucursal || "—"} />
             <Row label="Total Deuda" value={fmtGs(cliente.totalGs)} highlight />
-            {cliente.totalInteres > 0 && (
-              <>
-                <Row label="Saldo s/ interés" value={fmtGs(cliente.totalSaldoSinInteres)} />
-                <Row label="Interés acum." value={`+${fmtGs(cliente.totalInteres)}`} />
-              </>
-            )}
             <Row label="Máx. Atraso" value={`${cliente.maxDiasAtraso || 0} días`} />
             <Row label="Vendedor" value={cliente.vendedor || "—"} />
           </div>
@@ -704,10 +693,7 @@ function NotifDetalle({ cliente, modo, onClose }: { cliente: any; modo: string; 
               {cliente.cuotas?.map((q: any) => (
                 <div key={q.id} className="flex justify-between p-2 rounded-lg bg-secondary/40 text-xs">
                   <div>
-                    <p>{fmtGs(q.saldoTotalGs || q.saldoGs)}</p>
-                    {q.interesGs > 0 && (
-                      <p className="text-[10px] text-orange-400/70">+{fmtGs(q.interesGs)} interés</p>
-                    )}
+                    <p>{fmtGs(q.saldoGs)}</p>
                     <p className="text-[10px] text-muted-foreground">Vence: {fmtDate(q.fechaVcto)}</p>
                   </div>
                   <Badge variant={q.diasAtrasado > 0 ? "destructive" : "secondary"} className="text-[10px]">

@@ -86,8 +86,10 @@ export async function GET(req: NextRequest) {
           id: q.id,
           fechaVcto: q.fechaVcto,
           saldoGs: q.saldoGs,
-          saldoTotalGs: q.saldoTotalGs || q.saldoGs,
-          interesGs: q.interesGs || 0,
+          // 🛠️ FIX: no trabajamos con interés (no cuadra con el Excel).
+          // El saldo total es IGUAL al saldo del Excel. Solo contamos días vencidos.
+          saldoTotalGs: q.saldoGs,
+          interesGs: 0,
           diasAtraso: diasCalculados, // ← valor recalculado al vuelo
           diasAtrasadoDB: q.diasAtrasado, // ← valor guardado (para comparar)
           descripcion: q.descripcion,
@@ -98,9 +100,10 @@ export async function GET(req: NextRequest) {
         };
       });
 
-      const totalGs = cuotasMapeadas.reduce((s, q) => s + (q.saldoTotalGs || q.saldoGs), 0);
-      const totalSaldoSinInteres = cuotasMapeadas.reduce((s, q) => s + q.saldoGs, 0);
-      const totalInteres = totalGs - totalSaldoSinInteres;
+      // 🛠️ FIX: totalGs = suma de saldos del Excel (sin interés).
+      const totalGs = cuotasMapeadas.reduce((s, q) => s + (q.saldoGs || 0), 0);
+      const totalSaldoSinInteres = totalGs;
+      const totalInteres = 0;
       const maxDiasAtraso = Math.max(0, ...cuotasMapeadas.map((q) => q.diasAtraso));
       const todasNotificadas = cuotasMapeadas.every((q) => q.notificado);
       if (ocultarNotificados && todasNotificadas) return null;
