@@ -171,16 +171,6 @@ function TemplateAgrupadaTab() {
           />
         </div>
 
-        <div>
-          <Label className="text-xs font-semibold">🔧 Pie estático (fallback si no hay reglas dinámicas)</Label>
-          <Textarea
-            value={form?.pieEstatico ?? ""}
-            onChange={(e) => setForm({ ...form, pieEstatico: e.target.value })}
-            rows={3}
-            placeholder="Comuníquese al 021 123 456 para regularizar..."
-          />
-        </div>
-
         <Button onClick={() => save.mutate()} disabled={save.isPending} className="glow-primary">
           <Save className="w-4 h-4 mr-1" /> {save.isPending ? "Guardando…" : "💾 Guardar Template"}
         </Button>
@@ -260,15 +250,6 @@ function TemplateCodeudorTab() {
           <Switch
             checked={form?.usarReglasDinamicas ?? true}
             onCheckedChange={(v) => setForm({ ...form, usarReglasDinamicas: v })}
-          />
-        </div>
-
-        <div>
-          <Label className="text-xs font-semibold">🔧 Pie estático (fallback)</Label>
-          <Textarea
-            value={form?.pieEstatico ?? ""}
-            onChange={(e) => setForm({ ...form, pieEstatico: e.target.value })}
-            rows={3}
           />
         </div>
 
