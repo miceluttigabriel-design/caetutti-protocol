@@ -206,45 +206,10 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
     informconf: cliente?.informconf || "N",
   });
 
-  // === Codeudor (sección separada abajo del titular) ===
-  const [codeudor, setCodeudor] = useState({
-    codeudorNombre: cliente?.codeudorNombre || "",
-    codeudorTelefono: cliente?.codeudorTelefono || "",
-    codeudorCi: cliente?.codeudorCi || "",
-    codeudorParentesco: cliente?.codeudorParentesco || "",
-  });
+  // === Codeudor (solo lectura — el codeudor ya es una entidad propia en Clientes) ===
+  // El registro/edición del codeudor se hace desde el módulo Notificaciones.
+  const [codeudorNombre, setCodeudorNombre] = useState(cliente?.codeudorNombre || "");
   const [savingCodeudor, setSavingCodeudor] = useState(false);
-
-  const guardarCodeudor = async () => {
-    if (!cliente) return;
-    // Solo el nombre es obligatorio — el teléfono puede quedar vacío
-    if (!codeudor.codeudorNombre) {
-      toast.error("El nombre del codeudor es obligatorio");
-      return;
-    }
-    setSavingCodeudor(true);
-    try {
-      const r = await fetch(`/api/clientes/${cliente.id}/codeudor`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(codeudor),
-      });
-      if (!r.ok) throw new Error((await r.json()).error || "Error");
-      toast.success(
-        codeudor.codeudorTelefono
-          ? "Codeudor guardado correctamente"
-          : "Codeudor guardado sin teléfono — podés editarlo después"
-      );
-      // Actualizar el cliente local para que muestre el botón "Eliminar"
-      Object.assign(cliente, codeudor);
-      qc.invalidateQueries({ queryKey: ["clientes"] });
-      qc.invalidateQueries({ queryKey: ["notifs"] });
-    } catch (e: any) {
-      toast.error(e.message);
-    } finally {
-      setSavingCodeudor(false);
-    }
-  };
 
   const eliminarCodeudor = async () => {
     if (!cliente) return;
@@ -253,7 +218,7 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
     try {
       const r = await fetch(`/api/clientes/${cliente.id}/codeudor`, { method: "DELETE" });
       if (!r.ok) throw new Error();
-      setCodeudor({ codeudorNombre: "", codeudorTelefono: "", codeudorCi: "", codeudorParentesco: "" });
+      setCodeudorNombre("");
       toast.success("Codeudor eliminado");
       qc.invalidateQueries({ queryKey: ["clientes"] });
     } catch {
@@ -323,70 +288,25 @@ function ClienteDialog({ cliente, onClose, onSaved }: { cliente?: any; onClose: 
           </Field>
         </div>
 
-        {/* === SECCIÓN CODEUDOR (abajo del titular) === */}
-        {cliente && (
-          <div className="mt-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 space-y-3">
-            <div className="flex items-center justify-between">
+        {/* === CODEUDOR (compacto — solo nombre de la entidad) === */}
+        {codeudorNombre && (
+          <div className="mt-4 p-3 rounded-lg border border-amber-500/30 bg-amber-500/5 flex items-center justify-between gap-2">
+            <div className="min-w-0">
               <p className="text-xs font-semibold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
                 <ShieldAlert className="w-3.5 h-3.5" />
                 Codeudor
               </p>
-              {codeudor.codeudorNombre && (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-6 text-xs text-red-400 hover:text-red-300"
-                  onClick={eliminarCodeudor}
-                  disabled={savingCodeudor}
-                >
-                  Eliminar codeudor
-                </Button>
-              )}
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="Nombre del Codeudor">
-                <Input
-                  value={codeudor.codeudorNombre}
-                  onChange={(e) => setCodeudor({...codeudor, codeudorNombre: e.target.value})}
-                  placeholder="Nombre completo"
-                />
-              </Field>
-              <Field label="Teléfono del Codeudor (opcional)">
-                <Input
-                  value={codeudor.codeudorTelefono}
-                  onChange={(e) => setCodeudor({...codeudor, codeudorTelefono: e.target.value})}
-                  placeholder="09XX123456"
-                />
-              </Field>
-              <Field label="CI del Codeudor">
-                <Input
-                  value={codeudor.codeudorCi}
-                  onChange={(e) => setCodeudor({...codeudor, codeudorCi: e.target.value})}
-                  placeholder="Cédula"
-                />
-              </Field>
-              <Field label="Parentesco">
-                <Input
-                  value={codeudor.codeudorParentesco}
-                  onChange={(e) => setCodeudor({...codeudor, codeudorParentesco: e.target.value})}
-                  placeholder="Esposo/a, Padre, Hijo/a..."
-                />
-              </Field>
+              <p className="text-sm font-medium truncate">{codeudorNombre}</p>
             </div>
             <Button
               size="sm"
-              variant="outline"
-              className="w-full border-amber-500/40 text-amber-400 hover:bg-amber-500/10"
-              onClick={guardarCodeudor}
-              disabled={savingCodeudor || !codeudor.codeudorNombre}
+              variant="ghost"
+              className="h-7 text-xs text-red-400 hover:text-red-300 shrink-0"
+              onClick={eliminarCodeudor}
+              disabled={savingCodeudor}
             >
-              {savingCodeudor ? "Guardando…" : "Guardar Codeudor"}
+              {savingCodeudor ? "Eliminando…" : "Eliminar codeudor"}
             </Button>
-            <p className="text-[10px] text-muted-foreground">
-              El codeudor se guarda de forma permanente. No se borra al re-importar el Excel.
-              El teléfono es opcional — si lo borrás y guardás, el codeudor se mantiene sin teléfono.
-              Solo se elimina si hacés clic en "Eliminar codeudor".
-            </p>
           </div>
         )}
         <DialogFooter>
