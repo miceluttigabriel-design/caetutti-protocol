@@ -142,7 +142,9 @@ export async function generarMensajeAgrupado(
   // 3. Pie dinámico o estático
   let pie = "";
   if (template.usarReglasDinamicas) {
-    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente") || template.pieEstatico || "";
+    // 🛠️ FIX: si no hay reglas en BD, generar pie inteligente según días de atraso
+    const reglaPie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente");
+    const pieMsg = reglaPie || pieInteligenteCliente(maxDiasAtraso) || template.pieEstatico || "";
     // 🛠️ FIX: sustituir las variables del pie (como {dias_absolutos}) con la info
     // del cliente + la cuota con mayor atraso.
     const cuotaMayorAtraso = cuotas.reduce((max, q) =>
@@ -211,7 +213,11 @@ export async function generarMensajeCodeudor(
   // Pie
   let pie = "";
   if (template.usarReglasDinamicas) {
-    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor") || template.pieEstatico || "";
+    // 🛠️ FIX: si no hay reglas en BD (seed-pie-mora no ejecutado), generar un pie
+    // inteligente según los días de atraso — en vez de caer al pieEstatico que
+    // siempre es el mismo (amable) sin importar los días.
+    const reglaPie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor");
+    const pieMsg = reglaPie || pieInteligenteCodeudor(maxDiasAtraso) || template.pieEstatico || "";
     // 🛠️ FIX: sustituir las variables del pie (como {dias_absolutos}, {Entidad}, etc.)
     // con la info del codeudor + la cuota con mayor atraso. Sin esto, las reglas
     // con {dias_absolutos} mostraban literalmente "{dias_absolutos}" en el mensaje.
@@ -256,4 +262,89 @@ export function generarMensajeIndividual(
     ...varsCuota(cuota),
   };
   return sustituirVariables(reglaMensaje, vars);
+}
+
+// ============================================================
+// PIES INTELIGENTES (fallback cuando no hay reglas en BD)
+// ============================================================
+// Se usan cuando seed-pie-mora no fue ejecutado. Garantizan que el mensaje
+// tenga un pie con tono adecuado a los días de atraso, en vez del pieEstatico
+// genérico (que siempre es el mismo, sin importar los días).
+// ============================================================
+
+function pieInteligenteCliente(dias: number): string {
+  if (dias <= 7) {
+    return "Le recordamos amablemente que su cuota está próxima a vencer o recientemente vencida. " +
+      "Verifique el valor de su interés por mora para poder abonar su cuenta. " +
+      "Consulte ahora mismo con su gestor en línea.\n\n" +
+      "Atentamente,\nDpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 30) {
+    return "Su cuota tiene {dias_absolutos} días de atraso. Le solicitamos regularizar su situación a la brevedad. " +
+      "Verifique el valor actualizado de su interés mora para poder abonar su cuenta. " +
+      "Consulte ahora mismo con su gestor en línea.\n\n" +
+      "Saludos cordiales,\nDpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 60) {
+    return "Su cuenta registra {dias_absolutos} días de mora. Le instamos a regularizar su pago de forma urgente, " +
+      "ya que el interés por mora sigue acumulándose diariamente. " +
+      "Verifique el valor exacto de su interés mora con su gestor en línea.\n\n" +
+      "Dpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 90) {
+    return "IMPORTANTE: Su cuenta presenta {dias_absolutos} días de atraso. Último aviso antes de acciones de cobranza intensificada. " +
+      "Verifique el valor actualizado de su interés mora con su gestor en línea y abone hoy mismo. " +
+      "La falta de pago puede derivar en inclusión en Informconf y acciones legales.\n\n" +
+      "Dpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 180) {
+    return "AVISO FINAL: Su deuda con {dias_absolutos} días de mora será derivada al departamento legal en 48 horas. " +
+      "Última oportunidad de regularizar extrajudicialmente. " +
+      "Verifique el valor actualizado de su interés mora con su gestor en línea y realice el pago total hoy mismo.\n\n" +
+      "Dpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  return "NOTIFICACIÓN LEGAL: Su cuenta con {dias_absolutos} días de mora ha sido derivada al departamento legal " +
+    "para el inicio de acciones judiciales. " +
+    "Única instancia para evitar el proceso judicial: comuníquese HOY con su gestor en línea de VIZA HOME " +
+    "para verificar el valor final de su interés mora y acordar el pago total.\n\n" +
+    "Dpto. Legal — Casa Central\nVIZA HOME";
+}
+
+function pieInteligenteCodeudor(dias: number): string {
+  if (dias <= 7) {
+    return "Le informamos amablemente que la cuota del titular que usted avala está próxima a vencer o recientemente vencida. " +
+      "Colabore gestionando el pago con el titular. " +
+      "Verifique el valor del interés mora con su gestor en línea antes de abonar.\n\n" +
+      "Atentamente,\nDpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 30) {
+    return "La cuota del titular que usted avala tiene {dias_absolutos} días de atraso. " +
+      "En su calidad de codeudor/garante, le solicitamos colaborar gestionando la regularización con el titular. " +
+      "Verifique el valor actualizado del interés mora con su gestor en línea antes de abonar.\n\n" +
+      "Saludos cordiales,\nDpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 60) {
+    return "La cuenta del titular que usted avala registra {dias_absolutos} días de mora. " +
+      "Como codeudor/garante, usted es solidariamente responsable de la deuda y el interés por mora sigue acumulándose. " +
+      "Verifique el valor actualizado del interés mora con su gestor en línea antes de abonar.\n\n" +
+      "Dpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 90) {
+    return "IMPORTANTE: La cuenta del titular que usted avala presenta {dias_absolutos} días de atraso. " +
+      "Como codeudor/garante, VIZA HOME podrá exigirle directamente el pago total más el interés por mora acumulado. " +
+      "Verifique el valor actualizado del interés mora con su gestor en línea y regularice a la brevedad.\n\n" +
+      "Dpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  if (dias <= 180) {
+    return "AVISO FINAL: La deuda del titular que usted avala, con {dias_absolutos} días de mora, " +
+      "será derivada al departamento legal en 48 horas. " +
+      "Como codeudor/garante solidario, será incluido en las acciones legales y en el reporte a Informconf. " +
+      "Verifique el valor actualizado del interés mora con su gestor en línea y coordine el pago total HOY mismo.\n\n" +
+      "Dpto. de Cobranzas — Casa Central\nVIZA HOME";
+  }
+  return "NOTIFICACIÓN LEGAL: La deuda del titular que usted avala, con {dias_absolutos} días de mora, " +
+    "ha sido derivada al departamento legal. " +
+    "Como codeudor/garante solidario, será demandado judicialmente junto con el titular. " +
+    "Comuníquese HOY con su gestor en línea de VIZA HOME para verificar el valor final del interés mora y acordar el pago total.\n\n" +
+    "Dpto. Legal — Casa Central\nVIZA HOME";
 }

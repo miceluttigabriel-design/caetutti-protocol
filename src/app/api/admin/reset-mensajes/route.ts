@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
  * Esto es necesario porque los templates que ya están en la BD NO se actualizan
  * automáticamente cuando se cambian los defaults en `src/lib/mensajes.ts`.
  *
+ * Requiere permiso de admin.
+ *
  * Uso (consola del navegador, F12 → "allow pasting"):
  *   fetch('/api/admin/reset-mensajes', { method: 'POST' }).then(r => r.json()).then(console.log)
  */
@@ -27,7 +29,7 @@ export async function POST(req: NextRequest) {
 
   const resultados: any = { agrupada: 0, codeudor: 0 };
 
-  // TemplateAgrupada
+  // TemplateAgrupada (titular)
   const agg = await db.templateAgrupada.updateMany({
     where: { empresaId: user.empresaId },
     data: {
