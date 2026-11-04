@@ -11,7 +11,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Bell, CheckCircle2 } from "lucide-react";
-import { fmtGs, fmtPhone, fmtRelative, fmtDateTime } from "@/lib/format";
+import { fmtGs, fmtPhone, fmtRelative, fmtDateTime, fmtDate } from "@/lib/format";
 import { toast } from "sonner";
 
 const POR_PAGINA = 50;
@@ -507,7 +507,7 @@ function ClienteDetalle({ cliente, onClose }: { cliente: any; onClose: () => voi
                         )}
                       </p>
                       <p className="text-[10px] text-muted-foreground">
-                        Vence: {new Date(q.fechaVcto).toLocaleDateString("es-PY")}
+                        Vence: {fmtDate(q.fechaVcto)}
                         {q.notificado && q.ultimaNotificacion && (
                           <span className="ml-1.5 text-emerald-400" title={fmtDateTime(q.ultimaNotificacion)}>
                             · notif. {fmtRelative(q.ultimaNotificacion)}

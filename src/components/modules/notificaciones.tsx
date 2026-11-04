@@ -708,7 +708,7 @@ function NotifDetalle({ cliente, modo, onClose }: { cliente: any; modo: string; 
                     {q.interesGs > 0 && (
                       <p className="text-[10px] text-orange-400/70">+{fmtGs(q.interesGs)} interés</p>
                     )}
-                    <p className="text-[10px] text-muted-foreground">Vence: {new Date(q.fechaVcto).toLocaleDateString("es-PY")}</p>
+                    <p className="text-[10px] text-muted-foreground">Vence: {fmtDate(q.fechaVcto)}</p>
                   </div>
                   <Badge variant={q.diasAtrasado > 0 ? "destructive" : "secondary"} className="text-[10px]">
                     {diasEstado(q.diasAtrasado)}
@@ -871,11 +871,12 @@ function EditMontoDialog({ cliente, onClose, onSaved }: {
             const cambioInteres = interes !== (q.interesGs || 0);
             const cambio = cambioSaldo || cambioInteres;
 
-            const hoy = new Date();
-            hoy.setHours(0, 0, 0, 0);
-            const vcto = new Date(q.fechaVcto);
-            vcto.setHours(0, 0, 0, 0);
-            const dias = Math.max(0, Math.floor((hoy.getTime() - vcto.getTime()) / (1000 * 60 * 60 * 24)));
+            // 🛠️ Usar UTC en ambos lados para no tener off-by-one por zona horaria.
+            const ahora = new Date();
+            const hoyUtc = Date.UTC(ahora.getUTCFullYear(), ahora.getUTCMonth(), ahora.getUTCDate(), 0, 0, 0, 0);
+            const v = new Date(q.fechaVcto);
+            const vctoUtc = Date.UTC(v.getUTCFullYear(), v.getUTCMonth(), v.getUTCDate(), 0, 0, 0, 0);
+            const dias = Math.max(0, Math.floor((hoyUtc - vctoUtc) / (1000 * 60 * 60 * 24)));
 
             return (
               <div key={q.id} className={`p-2.5 rounded-lg border ${cambio ? "border-amber-500/40 bg-amber-500/5" : "border-border/40 bg-secondary/20"}`}>

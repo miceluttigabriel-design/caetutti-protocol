@@ -57,8 +57,13 @@ export async function GET(req: NextRequest) {
   // === Recálculo al vuelo de diasAtrasado ===
   // Para cada cuota, calcular los días reales basados en fechaVcto vs hoy.
   // Esto asegura que el conteo sea correcto sin importar cuándo se importó.
-  const hoy = new Date();
-  hoy.setHours(0, 0, 0, 0);
+  // 🛠️ Usamos componentes UTC en ambos lados para no tener off-by-one por zona
+  //    horaria (las fechas de cuotas son "puras" — día/mes/año sin hora real).
+  const ahora = new Date();
+  const hoyY = ahora.getUTCFullYear();
+  const hoyM = ahora.getUTCMonth();
+  const hoyD = ahora.getUTCDate();
+  const hoyUtcMidnight = Date.UTC(hoyY, hoyM, hoyD, 0, 0, 0, 0);
 
   // Track de cuotas que necesitan actualización en DB (en background)
   const cuotasAActualizar: Array<{ id: string; diasAtrasado: number }> = [];
@@ -68,8 +73,8 @@ export async function GET(req: NextRequest) {
       // Mapear cuotas con diasAtrasado recalculado al vuelo
       const cuotasMapeadas = c.cuotas.map((q) => {
         const vcto = new Date(q.fechaVcto);
-        vcto.setHours(0, 0, 0, 0);
-        const diffMs = hoy.getTime() - vcto.getTime();
+        const vctoUtcMidnight = Date.UTC(vcto.getUTCFullYear(), vcto.getUTCMonth(), vcto.getUTCDate(), 0, 0, 0, 0);
+        const diffMs = hoyUtcMidnight - vctoUtcMidnight;
         const diasCalculados = Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 
         // Si el valor en DB es diferente, marcar para actualizar
@@ -103,16 +108,16 @@ export async function GET(req: NextRequest) {
       // === ORDEN DE CUOTAS DENTRO DEL CLIENTE (igual que antes, aprobado) ===
       // 1º: las POR VENCER (fechaVcto >= hoy) — la más próxima primero
       // 2º: las VENCIDAS — la más recientemente vencida primero, la más antigua al final
+      // 🛠️ Usamos UTC en ambos lados para no tener off-by-one por zona horaria.
       const tMidnight = (d: Date | string) => {
         const x = new Date(d);
-        x.setHours(0, 0, 0, 0);
-        return x.getTime();
+        return Date.UTC(x.getUTCFullYear(), x.getUTCMonth(), x.getUTCDate(), 0, 0, 0, 0);
       };
       cuotasMapeadas.sort((x, y) => {
         const tx = tMidnight(x.fechaVcto);
         const ty = tMidnight(y.fechaVcto);
-        const px = tx >= hoy.getTime();
-        const py = ty >= hoy.getTime();
+        const px = tx >= hoyUtcMidnight;
+        const py = ty >= hoyUtcMidnight;
         if (px !== py) return px ? -1 : 1;
         return px ? tx - ty : ty - tx;
       });
@@ -123,15 +128,14 @@ export async function GET(req: NextRequest) {
       // Si NO tiene ninguna vencida → va al bloque POR VENCER
       //    y mostramos su cuota por vencer MÁS PRÓXIMA.
       // Así ningún cliente vencido aparece mezclado en medio de los POR VENCER.
-      const hoyTs = hoy.getTime();
-      const tieneVencidas = cuotasMapeadas.some((q) => tMidnight(q.fechaVcto) < hoyTs);
+      const tieneVencidas = cuotasMapeadas.some((q) => tMidnight(q.fechaVcto) < hoyUtcMidnight);
 
       let proximaVcto: Date | null = null;
       let fechaMasVencida: Date | null = null;
       if (tieneVencidas) {
         fechaMasVencida =
           cuotasMapeadas
-            .filter((q) => tMidnight(q.fechaVcto) < hoyTs)
+            .filter((q) => tMidnight(q.fechaVcto) < hoyUtcMidnight)
             .sort((a, b) => tMidnight(a.fechaVcto) - tMidnight(b.fechaVcto))[0]?.fechaVcto
             || null;
       } else {

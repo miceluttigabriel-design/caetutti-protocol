@@ -449,12 +449,17 @@ function parseFecha(v: any): Date | null {
   if (v === "" || v === null || v === undefined) return null;
   if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
 
-  // Excel serial number
+  // Excel serial number — interpretarlo como fecha a medianoche LOCAL (no UTC).
+  // Antes se hacía `new Date(ms)` que crea en UTC y luego al mostrar en hora local
+  // (Paraguay UTC-3) se "corría" un día atrás (ej: 01/11 → 31/10).
+  // Ahora: extraemos Y/M/D del serial y creamos con `new Date(y, m, d)` que es local.
   if (typeof v === "number" && v > 30000 && v < 80000) {
-    // Excel epoch: 1900-01-01 = 1, but with leap year bug (25569 = 1970-01-01)
+    // Excel epoch: 1900-01-01 = 1 (con bug de año bisiesto, 25569 = 1970-01-01)
     const ms = (v - 25569) * 86400 * 1000;
-    const d = new Date(ms);
-    return isNaN(d.getTime()) ? null : d;
+    const utc = new Date(ms); // UTC puro
+    // Construir fecha local usando los componentes UTC (son los "correctos" del Excel)
+    const local = new Date(utc.getUTCFullYear(), utc.getUTCMonth(), utc.getUTCDate(), 0, 0, 0, 0);
+    return isNaN(local.getTime()) ? null : local;
   }
 
   const s = String(v).trim();

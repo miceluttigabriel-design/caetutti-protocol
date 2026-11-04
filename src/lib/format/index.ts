@@ -29,12 +29,19 @@ export function fmtPct(value: number | null | undefined, digits = 1): string {
 export function fmtDate(value: Date | string | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;
-  return d.toLocaleDateString("es-PY", { day: "2-digit", month: "2-digit", year: "numeric" });
+  if (isNaN(d.getTime())) return "—";
+  // 🛠️ FIX timezone: si la fecha viene como ISO UTC "2026-11-01T00:00:00.000Z",
+  // toLocaleDateString("es-PY") la convierte a hora local (UTC-3) y muestra 31/10.
+  // Para fechas "puras" (sin hora real) usamos los componentes UTC directamente,
+  // que son los que se guardaron como día/mes/año reales del Excel.
+  return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}/${d.getUTCFullYear()}`;
 }
 
 export function fmtDateTime(value: Date | string | null | undefined): string {
   if (!value) return "—";
   const d = typeof value === "string" ? new Date(value) : value;
+  if (isNaN(d.getTime())) return "—";
+  // Para fechas+hora reales (notificaciones, conversaciones) sí usamos hora local.
   return d.toLocaleString("es-PY", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
