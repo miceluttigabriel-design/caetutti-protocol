@@ -37,16 +37,23 @@ export function varsCliente(cliente: any, totalGs: number, cantidadCuotas: numbe
       ? "⚠ AVISO: Su cuenta figura en INFORCONF. Regularice urgentemente para evitar acciones legales."
       : "",
     "Informconf": cliente.informconf === "S" ? "Sí" : "No",
+    // 🛠️ Nombre del codeudor (para plantillas de codeudor que quieran personalizar saludo)
+    "Nombre Codeudor": cliente.nombreCodeudor || "",
   };
 }
 
 // Para detalle (info de cada cuota)
 export function varsCuota(cuota: any): Record<string, string | number> {
   const dias = cuota.diasAtrasado ?? 0;
-  // 🛠️ FIX: usamos saldoGs directo (no saldoTotalGs) — no trabajamos con interés.
+  // 🛠️ FIX timezone: usar componentes UTC para no tener off-by-one (31/10 → 01/11)
+  const fmtFecha = (d: any) => {
+    if (!d) return "";
+    const x = new Date(d);
+    return `${String(x.getUTCDate()).padStart(2, "0")}/${String(x.getUTCMonth() + 1).padStart(2, "0")}/${x.getUTCFullYear()}`;
+  };
   return {
-    "Fecha Vcto": cuota.fechaVcto ? `${String(new Date(cuota.fechaVcto).getUTCDate()).padStart(2, "0")}/${String(new Date(cuota.fechaVcto).getUTCMonth() + 1).padStart(2, "0")}/${new Date(cuota.fechaVcto).getUTCFullYear()}` : "",
-    "Fecha Emision": cuota.fechaEmision ? `${String(new Date(cuota.fechaEmision).getUTCDate()).padStart(2, "0")}/${String(new Date(cuota.fechaEmision).getUTCMonth() + 1).padStart(2, "0")}/${new Date(cuota.fechaEmision).getUTCFullYear()}` : "",
+    "Fecha Vcto": fmtFecha(cuota.fechaVcto),
+    "Fecha Emision": fmtFecha(cuota.fechaEmision),
     "Saldo en Gs": new Intl.NumberFormat("es-PY").format(cuota.saldoGs || 0),
     "Saldo Guarani": new Intl.NumberFormat("es-PY").format(cuota.saldoGuarani || 0),
     "Saldo Dolar": new Intl.NumberFormat("es-PY").format(cuota.saldoDolar || 0),
@@ -135,21 +142,12 @@ export async function generarMensajeAgrupado(
   // 3. Pie dinámico o estático
   let pie = "";
   if (template.usarReglasDinamicas) {
-    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente") || template.pieEstatico || "";
-    // Aplicar sustitución de variables al pie (cliente + cuota con mayor atraso)
-    const cuotaMayorAtraso = cuotas.reduce((max, q) =>
-      ((q.diasAtrasado ?? 0) > (max.diasAtrasado ?? 0)) ? q : max, cuotas[0] || {});
-    const varsPie = {
-      ...varsCliente(cliente, totalGs, cuotas.length),
-      ...varsCuota(cuotaMayorAtraso),
-    };
-    pie = sustituirVariables(pieMsg, varsPie);
+    pie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_cliente") || template.pieEstatico || "";
   } else {
     pie = template.pieEstatico || "";
   }
 
-  // Componer mensaje final
-  // 🛠️ Si el cliente está en INFORCONF, insertar aviso después de la cabecera
+  // 🛠️ Componer mensaje final: si el titular está en INFORCONF, insertar aviso
   const partes = [cabecera];
   if (cliente.informconf === "S") {
     partes.push("⚠ AVISO: Su cuenta figura en INFORCONF. Regularice urgentemente para evitar acciones legales.");
@@ -203,22 +201,14 @@ export async function generarMensajeCodeudor(
   // Pie
   let pie = "";
   if (template.usarReglasDinamicas) {
-    const pieMsg = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor") || template.pieEstatico || "";
-    // Aplicar sustitución de variables al pie (codeudor + cuota con mayor atraso)
-    const cuotaMayorAtraso = cuotas.reduce((max, q) =>
-      ((q.diasAtrasado ?? 0) > (max.diasAtrasado ?? 0)) ? q : max, cuotas[0] || {});
-    const varsPie = {
-      ...varsCliente(codeudor, totalGs, cuotas.length),
-      ...varsCuota(cuotaMayorAtraso),
-    };
-    pie = sustituirVariables(pieMsg, varsPie);
+    pie = await seleccionarPieDinamico(empresaId, maxDiasAtraso, "pie_codeudor") || template.pieEstatico || "";
   } else {
     pie = template.pieEstatico || "";
   }
 
-  // 🛠️ Si el titular está en INFORCONF, insertar aviso después de la cabecera
-  // (informconf viene del codeudorData que manda el route, copiado del titular)
-  const titularInformconf = (codeudor as any)?.informconf || (cuotas[0] as any)?.cliente?.informconf || "N";
+  // 🛠️ Componer mensaje final: si el titular está en INFORCONF, insertar aviso
+  // (informconf viene en codeudor.informconf, copiado del titular por el route)
+  const titularInformconf = (codeudor as any)?.informconf || "N";
   const partes = [cabecera];
   if (titularInformconf === "S") {
     partes.push("⚠ AVISO: La cuenta del titular figura en INFORCONF. Regularice urgentemente para evitar acciones legales.");
