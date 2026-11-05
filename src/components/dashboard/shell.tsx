@@ -14,6 +14,8 @@ import { RecordatoriosModule } from "@/components/modules/recordatorios";
 import { ConfiguracionModule } from "@/components/modules/configuracion";
 import { ContactosDiaModule } from "@/components/modules/contactos-dia";
 import { HistorialModule } from "@/components/modules/historial";
+import { MobileNav } from "./mobile-nav";
+import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { hasPermission } from "@/lib/session";
 import { PermisoKey } from "@/lib/permisos";
 
@@ -90,7 +92,8 @@ export function DashboardShell() {
           onSucursalChange={setSucursalFiltro}
         />
 
-        <main className="flex-1 overflow-y-auto p-4 lg:p-6">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6">
+          <InstallPrompt />
           {puedeVer ? (
             <div key={page} className="animate-fade-in">
               {renderPage(page, sucursalFiltro)}
@@ -108,6 +111,16 @@ export function DashboardShell() {
           )}
         </main>
       </div>
+
+      {/* Barra inferior móvil (solo < lg) */}
+      <MobileNav
+        currentPage={page}
+        onNavigate={(p) => { setPage(p); setSidebarOpen(false); }}
+        user={user}
+        onLogout={() => signOut({ callbackUrl: "/" })}
+        sucursalFiltro={sucursalFiltro}
+        onSucursalChange={setSucursalFiltro}
+      />
     </div>
   );
 }

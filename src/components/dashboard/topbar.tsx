@@ -45,20 +45,24 @@ export function Topbar({ user, page, onToggleSidebar, sucursalFiltro, onSucursal
   const meta = PAGE_TITLES[page] || { title: "CobranzasFlow", subtitle: "" };
 
   return (
-    <header className="sticky top-0 z-20 glass border-b border-border/40">
-      <div className="flex items-center justify-between px-4 lg:px-6 py-3 gap-4">
-        <div className="flex items-center gap-3 min-w-0">
+    <header
+      className="sticky top-0 z-20 glass border-b border-border/40"
+      style={{ paddingTop: "env(safe-area-inset-top)" }}
+    >
+      <div className="flex items-center justify-between px-3 sm:px-4 lg:px-6 py-2.5 sm:py-3 gap-2 sm:gap-4">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden h-9 w-9 shrink-0"
+            className="lg:hidden h-10 w-10 shrink-0"
             onClick={onToggleSidebar}
+            aria-label="Abrir menú"
           >
             <Menu className="w-5 h-5" />
           </Button>
           <div className="min-w-0">
-            <h1 className="text-lg font-bold leading-tight truncate">{meta.title}</h1>
-            <p className="text-xs text-muted-foreground truncate">{meta.subtitle}</p>
+            <h1 className="text-base sm:text-lg font-bold leading-tight truncate">{meta.title}</h1>
+            <p className="text-[11px] sm:text-xs text-muted-foreground truncate hidden sm:block">{meta.subtitle}</p>
           </div>
         </div>
 

@@ -578,3 +578,66 @@ input:focus, textarea:focus, select:focus {
 a {
   font-weight: 600 !important;
 }
+
+/* ============================================================
+   === MOBILE / PWA (Caetutti Protocol en el celular) ===
+   ============================================================ */
+
+/* Eliminar flash azul de tap en Android/iOS */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* En modo app instalada (standalone) evitar rebotes raros de scroll */
+@media all and (display-mode: standalone) {
+  body {
+    overscroll-behavior-y: none;
+    user-select: none; /* evitar selección accidental al scrollear con el dedo */
+  }
+  input, textarea, select, [contenteditable] {
+    user-select: text; /* pero siempre poder escribir/editar */
+  }
+}
+
+/* Safe areas: respetar notch / barra de gestos del iPhone */
+.safe-top { padding-top: max(env(safe-area-inset-top), 0px); }
+.safe-bottom { padding-bottom: max(env(safe-area-inset-bottom), 0px); }
+
+/* iOS hace zoom al enfocar inputs con font-size < 16px.
+   En pantallas táctiles forzamos 16px para que no salte el zoom. */
+@media (pointer: coarse) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* Targets táctiles más cómodos en móvil (mínimo recomendado 44px) */
+@media (max-width: 1023px) {
+  button, [role="button"], [role="menuitem"], [role="option"], a {
+    min-height: 36px;
+  }
+}
+
+/* Diálogos y sheets por encima de la barra inferior móvil */
+@media (max-width: 1023px) {
+  [data-slot="dialog-content"], [data-slot="sheet-content"] {
+    z-index: 60;
+  }
+}
+
+/* Scrollbar discreta para tablas con scroll horizontal en móvil */
+.overflow-x-auto {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 255, 65, 0.3) transparent;
+  -webkit-overflow-scrolling: touch;
+}
+.overflow-x-auto::-webkit-scrollbar {
+  height: 6px;
+}
+.overflow-x-auto::-webkit-scrollbar-thumb {
+  background: rgba(0, 255, 65, 0.3);
+  border-radius: 3px;
+}
+.overflow-x-auto::-webkit-scrollbar-track {
+  background: transparent;
+}

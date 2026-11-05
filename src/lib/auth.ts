@@ -148,10 +148,12 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
-    maxAge: 60 * 60 * 24 * 7, // 7 days
+    // 30 días: ideal para móvil — no te desloguea cada semana.
+    // La sesión vive en cookie segura; los DATOS viven siempre en el servidor.
+    maxAge: 60 * 60 * 24 * 30,
   },
   jwt: {
-    maxAge: 60 * 60 * 24 * 7,
+    maxAge: 60 * 60 * 24 * 30,
   },
   callbacks: {
     async jwt({ token, user }) {
