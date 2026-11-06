@@ -41,16 +41,16 @@ export function HistorialModule() {
     <div className="space-y-4">
       {/* Filtros */}
       <Card className="glass-card p-3">
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-end gap-2">
           <div>
             <label className="text-[10px] text-muted-foreground uppercase">Desde</label>
-            <Input type="date" value={filters.desde} onChange={(e) => setFilters({...filters, desde: e.target.value})} className="w-36" />
+            <Input type="date" value={filters.desde} onChange={(e) => setFilters({...filters, desde: e.target.value})} className="w-full sm:w-36" />
           </div>
           <div>
             <label className="text-[10px] text-muted-foreground uppercase">Hasta</label>
-            <Input type="date" value={filters.hasta} onChange={(e) => setFilters({...filters, hasta: e.target.value})} className="w-36" />
+            <Input type="date" value={filters.hasta} onChange={(e) => setFilters({...filters, hasta: e.target.value})} className="w-full sm:w-36" />
           </div>
-          <div className="flex-1 min-w-[200px]">
+          <div className="col-span-2 sm:flex-1 sm:min-w-[200px]">
             <label className="text-[10px] text-muted-foreground uppercase">Buscar</label>
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
@@ -58,10 +58,10 @@ export function HistorialModule() {
                 placeholder="Cliente, teléfono, mensaje…" className="pl-9" />
             </div>
           </div>
-          <div>
+          <div className="col-span-2 sm:col-span-1">
             <label className="text-[10px] text-muted-foreground uppercase">Estado</label>
             <Select value={filters.estado} onValueChange={(v) => setFilters({...filters, estado: v})}>
-              <SelectTrigger className="w-40">
+              <SelectTrigger className="w-full sm:w-40">
                 <Filter className="w-3.5 h-3.5 mr-1.5 text-muted-foreground" />
                 <SelectValue />
               </SelectTrigger>
@@ -74,10 +74,10 @@ export function HistorialModule() {
               </SelectContent>
             </Select>
           </div>
-          <Button onClick={() => setApplied({...filters})} className="glow-primary">
+          <Button onClick={() => setApplied({...filters})} className="glow-primary col-span-1">
             <Search className="w-3.5 h-3.5 mr-1" /> Buscar
           </Button>
-          <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+          <Button variant="outline" onClick={() => refetch()} disabled={isFetching} className="col-span-1">
             <RefreshCw className={`w-3.5 h-3.5 mr-1 ${isFetching ? "animate-spin" : ""}`} /> Actualizar
           </Button>
         </div>
@@ -95,7 +95,44 @@ export function HistorialModule() {
 
       {/* Tabla */}
       <Card className="glass-card overflow-hidden">
-        <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+        {/* === Vista celular: tarjetas (< 768px) === */}
+        <div className="md:hidden divide-y divide-border/20">
+          {isLoading && Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="p-3"><Skeleton className="h-16" /></div>
+          ))}
+          {!isLoading && notifs.length === 0 && (
+            <p className="text-center py-10 px-4 text-muted-foreground text-sm">
+              {applied ? "No hay notificaciones en el rango seleccionado." : "Configura filtros y busca para ver el historial."}
+            </p>
+          )}
+          {notifs.map((n: any) => (
+            <div key={n.id} className="p-3 space-y-1">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold leading-tight break-words">{n.cliente?.entidad || "—"}</p>
+                  <p className="text-[11px] text-muted-foreground">
+                    {fmtPhone(n.telefono)}{n.cliente?.sucursal?.nombre ? ` · ${n.cliente.sucursal.nombre}` : ""}
+                  </p>
+                </div>
+                <Badge variant={
+                  n.estado === "leida" ? "default" :
+                  n.estado === "recibida" ? "secondary" :
+                  n.estado === "fallida" ? "destructive" : "outline"
+                } className="text-[10px] shrink-0">
+                  {n.estado}
+                </Badge>
+              </div>
+              {n.mensaje && <p className="text-xs text-muted-foreground line-clamp-2 break-words">{n.mensaje}</p>}
+              {n.respuesta && <p className="text-[11px] text-red-400/80 break-words">{n.respuesta}</p>}
+              <p className="text-[10px] text-muted-foreground/70">
+                {fmtDateTime(n.createdAt)}{n.usuario?.nombre ? ` · ${n.usuario.nombre}` : ""}
+              </p>
+            </div>
+          ))}
+        </div>
+
+        {/* === Vista tablet/escritorio: tabla (≥ 768px) === */}
+        <div className="hidden md:block overflow-x-auto max-h-[60vh] overflow-y-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border/40 bg-secondary/30 sticky top-0">
               <tr>

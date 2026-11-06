@@ -52,7 +52,7 @@ export function Sidebar({ currentPage, onNavigate, user, onLogout, isOpen, onClo
 
   return (
     <aside
-      className={`fixed lg:sticky top-0 left-0 z-40 h-screen w-64 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col transition-transform duration-300 ${
+      className={`fixed lg:sticky top-0 left-0 z-40 h-dvh w-64 shrink-0 border-r border-sidebar-border bg-sidebar flex flex-col transition-transform duration-300 ${
         isOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
       }`}
     >

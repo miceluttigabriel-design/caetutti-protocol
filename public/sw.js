@@ -6,7 +6,7 @@
    - Si no hay conexión → página offline amigable.
    ============================================================ */
 
-const VERSION = "caetutti-v1";
+const VERSION = "caetutti-v2";
 const SHELL_CACHE = `${VERSION}-shell`;
 const STATIC_CACHE = `${VERSION}-static`;
 const OFFLINE_URL = "/offline.html";
@@ -45,7 +45,17 @@ self.addEventListener("activate", (event) => {
 
 // ¿Es un asset estático con hash de contenido? (seguro de cachear)
 function isHashedStatic(url) {
-  // ej: /_next/static/chunks/main-a1b2c3d4e5f6.js
+  // Todo lo que Next.js sirve bajo /_next/static/ lleva hash de contenido
+  // (JS, CSS, fuentes en /media/). Es inmutable → seguro cachear.
+  // Se excluye el modo desarrollo.
+  if (
+    url.pathname.startsWith("/_next/static/") &&
+    !url.pathname.includes("/development/") &&
+    /\.(js|css|woff2?|png|svg|jpg|jpeg|webp|ico)$/i.test(url.pathname)
+  ) {
+    return true;
+  }
+  // ej: /icons/icon-192-a1b2c3d4e5f6.png
   return (
     (url.pathname.startsWith("/_next/static/") ||
       url.pathname.startsWith("/icons/") ||
@@ -56,6 +66,13 @@ function isHashedStatic(url) {
       url.pathname
     )
   );
+}
+
+async function trimCache(cache, max) {
+  try {
+    const keys = await cache.keys();
+    for (let i = 0; i < keys.length - max; i++) await cache.delete(keys[i]);
+  } catch {}
 }
 
 self.addEventListener("fetch", (event) => {
@@ -118,7 +135,10 @@ self.addEventListener("fetch", (event) => {
         if (cached) return cached;
         try {
           const res = await fetch(req);
-          if (res.ok) cache.put(req, res.clone());
+          if (res.ok) {
+            cache.put(req, res.clone());
+            trimCache(cache, 150); // evita que crezca sin límite entre despliegues
+          }
           return res;
         } catch {
           return cached || Response.error();

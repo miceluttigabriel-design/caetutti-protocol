@@ -14,7 +14,7 @@ import { Search, Plus, Edit2, Phone, MapPin, AlertTriangle, ShieldAlert, Eye, Be
 import { fmtGs, fmtPhone, fmtRelative, fmtDateTime } from "@/lib/format";
 import { toast } from "sonner";
 
-export function ClientesModule() {
+export function ClientesModule(_props: { sucursal?: string } = {}) {
   const qc = useQueryClient();
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState<any | null>(null);
@@ -70,7 +70,58 @@ export function ClientesModule() {
 
       {/* Table */}
       <Card className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* === Vista celular: tarjetas (< 768px) === */}
+        <div className="md:hidden divide-y divide-border/20">
+          {isLoading && Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-3"><Skeleton className="h-20" /></div>
+          ))}
+          {!isLoading && clientes.length === 0 && (
+            <p className="text-center py-10 px-4 text-muted-foreground text-sm">No hay clientes que coincidan con la búsqueda.</p>
+          )}
+          {!isLoading && clientes.map((c: any) => (
+            <div key={c.id} className={`p-3 space-y-2 ${c.notificado ? "opacity-60" : ""}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="font-semibold leading-tight break-words">{c.entidad}</p>
+                    {c.judicial === "S" && <ShieldAlert className="w-3.5 h-3.5 text-red-400 shrink-0" />}
+                    {c.informconf === "S" && <AlertTriangle className="w-3.5 h-3.5 text-amber-400 shrink-0" />}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">{c.codigoEntidad} · {c.localidad || "—"}{c.sucursal?.nombre ? ` · ${c.sucursal.nombre}` : ""}</p>
+                </div>
+                <div className="text-right shrink-0">
+                  <p className="font-bold text-amber-400">{fmtGs(c.saldoTotal)}</p>
+                  <Badge variant="secondary" className="text-[10px] mt-0.5">{c.cuotasPendientes} cuota{c.cuotasPendientes === 1 ? "" : "s"}</Badge>
+                </div>
+              </div>
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  {c.telefono ? (
+                    <a href={`tel:${c.telefono}`} className="inline-flex items-center gap-1.5 text-xs text-primary min-h-[36px]">
+                      <Phone className="w-3.5 h-3.5" /> {fmtPhone(c.telefono)}
+                    </a>
+                  ) : (
+                    <Badge variant="outline" className="text-amber-400 border-amber-500/30 text-[10px]">Sin teléfono</Badge>
+                  )}
+                  <p className="text-[10px] text-muted-foreground">
+                    {c.notificado && c.ultimaNotificacion ? `✓ Notificado ${fmtRelative(c.ultimaNotificacion)}` : "Sin notificar"}
+                  </p>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="outline" size="sm" className="h-10 px-3" onClick={() => setViewing(c)} aria-label="Ver detalle">
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button variant="outline" size="sm" className="h-10 px-3" onClick={() => setEditing(c)} aria-label="Editar">
+                    <Edit2 className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* === Vista tablet/escritorio: tabla (≥ 768px) === */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border/40 bg-secondary/30">
               <tr>

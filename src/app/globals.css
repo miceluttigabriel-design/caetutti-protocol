@@ -125,6 +125,7 @@
     @apply bg-background text-foreground;
     background: #050807;
     min-height: 100vh;
+    min-height: 100dvh; /* altura real en celular (barra del navegador) */
     font-feature-settings: "ss01", "ss02";
     /* === NITIDEZ DE FUENTE === */
     -webkit-font-smoothing: antialiased;
@@ -640,4 +641,47 @@ html {
 }
 .overflow-x-auto::-webkit-scrollbar-track {
   background: transparent;
+}
+
+
+/* ============================================================
+   === MEJORAS MÓVIL v2 ===
+   ============================================================ */
+
+/* Sin retraso de 300ms al tocar y sin zoom accidental por doble toque */
+html {
+  touch-action: manipulation;
+}
+
+/* Nunca scroll horizontal de toda la página en el celular */
+body {
+  overflow-x: clip;
+}
+
+@media (max-width: 1023px) {
+  /* El viñeteado oscuro de los bordes tapaba contenido en pantallas chicas:
+     lo suavizamos y apagamos el parpadeo (ahorra batería). El estilo se mantiene. */
+  .scanlines::after {
+    background: radial-gradient(ellipse at center, transparent 0%, rgba(0, 0, 0, 0.18) 100%);
+  }
+  .flicker {
+    animation: none;
+  }
+}
+
+/* Respetar "reducir movimiento" del sistema (accesibilidad y batería) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Los inputs de fecha/hora ocupan todo el ancho disponible en móvil */
+@media (pointer: coarse) {
+  input[type="date"], input[type="time"], input[type="datetime-local"] {
+    min-height: 44px;
+  }
 }

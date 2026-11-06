@@ -234,13 +234,14 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
   return (
     <Card className={`glass-card p-3 transition-all ${todasNotificadas ? "opacity-50 border-emerald-500/20" : ""}`}>
       {/* === FILA PRINCIPAL: CLIENTE === */}
-      <div className="flex items-center gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 sm:gap-3">
+       <div className="flex items-start justify-between gap-3 sm:contents">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <Badge variant="outline" className="text-[10px] font-mono px-1.5 py-0 shrink-0 border-primary/30 text-primary">
               #{cliente.codigoEntidad}
             </Badge>
-            <p className="font-semibold truncate">{cliente.entidad}</p>
+            <p className="font-semibold break-words sm:truncate leading-tight">{cliente.entidad}</p>
             {cliente.judicial === "S" && <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />}
             {todasNotificadas && (
               <Badge variant="outline" className="text-[10px] text-emerald-400 border-emerald-500/30 bg-emerald-500/10">
@@ -276,13 +277,14 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
             </p>
           )}
         </div>
-        <div className="flex flex-col gap-1 shrink-0">
-          <Button variant="ghost" size="sm" onClick={onView} className="h-7 text-xs">
+       </div>
+        <div className="grid grid-cols-3 gap-1.5 sm:flex sm:flex-col sm:gap-1 shrink-0">
+          <Button variant="outline" size="sm" onClick={onView} className="h-10 sm:h-7 text-xs sm:border-transparent sm:bg-transparent">
             <Eye className="w-3.5 h-3.5 mr-1" /> Ver
           </Button>
           <Button
             variant="outline" size="sm"
-            className="h-7 text-xs text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
+            className="h-10 sm:h-7 text-xs text-amber-400 border-amber-500/30 hover:bg-amber-500/10"
             onClick={() => setShowEditMonto(true)}
             title="Editar monto antes de enviar"
           >
@@ -290,7 +292,7 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
             Editar
           </Button>
           <Button
-            size="sm" className="h-7 text-xs glow-primary"
+            size="sm" className="h-10 sm:h-7 text-xs glow-primary"
             disabled={sinTelefono}
             onClick={abrirWhatsappCliente}
           >
@@ -316,7 +318,7 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
 
       {/* === FILA SECUNDARIA: CODEUDOR === */}
       {cliente.codeudor ? (
-        <div className="mt-2 pt-2 border-t border-border/30 flex items-center gap-3 bg-violet-500/5 -mx-3 -mb-3 px-3 pb-3 rounded-b-xl">
+        <div className="mt-2 pt-2 border-t border-border/30 flex flex-wrap items-center gap-x-3 gap-y-2 bg-violet-500/5 -mx-3 -mb-3 px-3 pb-3 rounded-b-xl">
           <div className="w-7 h-7 rounded-full bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0">
             <User className="w-3.5 h-3.5" />
           </div>
@@ -333,10 +335,10 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
               {fmtPhone(cliente.codeudor.telefono)}
             </p>
           </div>
-          <div className="flex items-center gap-1 shrink-0">
+          <div className="flex items-center gap-1 shrink-0 w-full sm:w-auto justify-end">
             <Button
               size="sm" variant="outline"
-              className="h-7 text-xs text-violet-300 border-violet-500/30 hover:bg-violet-500/10"
+              className="h-9 sm:h-7 text-xs text-violet-300 border-violet-500/30 hover:bg-violet-500/10"
               disabled={!cliente.codeudor.telefono}
               onClick={abrirWhatsappCodeudor}
             >
@@ -345,7 +347,7 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
             </Button>
             <Button
               size="sm" variant="ghost"
-              className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
+              className="h-9 sm:h-7 text-xs text-violet-300 hover:bg-violet-500/10"
               onClick={onEditCodeudor} title="Editar codeudor"
             >
               <Edit2 className="w-3.5 h-3.5 mr-1" />
@@ -354,13 +356,13 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
           </div>
         </div>
       ) : (
-        <div className="mt-2 pt-2 border-t border-border/30 flex items-center justify-between">
+        <div className="mt-2 pt-2 border-t border-border/30 flex flex-wrap items-center justify-between gap-2">
           <p className="text-[11px] text-muted-foreground italic flex items-center gap-1">
             <UserPlus className="w-3 h-3" /> Sin codeudor registrado
           </p>
           <Button
             variant="ghost" size="sm"
-            className="h-7 text-xs text-violet-300 hover:bg-violet-500/10"
+            className="h-9 sm:h-7 text-xs text-violet-300 hover:bg-violet-500/10"
             onClick={onEditCodeudor}
           >
             <UserPlus className="w-3.5 h-3.5 mr-1" /> Registrar Codeudor
@@ -372,13 +374,13 @@ function NotifCard({ cliente, onView, onEditCodeudor }: {
       {/* 🛠️ Si el titular YA tiene codeudor, mostrar botón "Agregar Otro Garante"
           que abre el formulario de garantes (NO reemplaza el codeudor existente). */}
       {cliente.codeudor && (
-        <div className="mt-2 pt-2 border-t border-violet-500/20 flex items-center justify-between bg-violet-500/5 -mx-3 -mb-3 px-3 pb-2 rounded-b-xl">
+        <div className="mt-2 pt-2 border-t border-violet-500/20 flex flex-wrap items-center justify-between gap-2 bg-violet-500/5 -mx-3 -mb-3 px-3 pb-2 rounded-b-xl">
           <p className="text-[11px] text-violet-300 italic flex items-center gap-1">
             <UserPlus className="w-3 h-3" /> ¿Necesitás otro garante para este titular?
           </p>
           <Button
             variant="outline" size="sm"
-            className="h-7 text-xs text-violet-300 border-violet-500/40 hover:bg-violet-500/10 px-3 font-semibold"
+            className="h-9 sm:h-7 text-xs text-violet-300 border-violet-500/40 hover:bg-violet-500/10 px-3 font-semibold"
             onClick={() => {
               // Disparar el apertura del formulario de garantes
               // usando un evento custom que GarantesSection escucha
@@ -538,7 +540,7 @@ function GarantesSection({ cliente }: { cliente: any }) {
         </p>
         <Button
           variant="outline" size="sm"
-          className="h-7 text-xs text-sky-300 border-sky-500/40 hover:bg-sky-500/10 px-3 font-semibold"
+          className="h-9 sm:h-7 text-xs text-sky-300 border-sky-500/40 hover:bg-sky-500/10 px-3 font-semibold"
           onClick={() => setShowAgregar(true)}
         >
           <UserPlus className="w-3.5 h-3.5 mr-1" /> Agregar Garante
@@ -558,7 +560,7 @@ function GarantesSection({ cliente }: { cliente: any }) {
             </p>
             <Button
               variant="outline" size="sm"
-              className="h-7 text-xs text-sky-300 border-sky-500/40 hover:bg-sky-500/10 px-3 font-semibold"
+              className="h-9 sm:h-7 text-xs text-sky-300 border-sky-500/40 hover:bg-sky-500/10 px-3 font-semibold"
               onClick={() => setShowAgregar(true)}
               disabled={showAgregar}
             >
@@ -667,11 +669,11 @@ function GarantesSection({ cliente }: { cliente: any }) {
             onChange={(e) => setNuevoGarante({ ...nuevoGarante, garanteParentesco: e.target.value })}
           />
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" className="h-7 text-xs" onClick={() => setShowAgregar(false)}>
+            <Button variant="outline" size="sm" className="h-9 sm:h-7 text-xs" onClick={() => setShowAgregar(false)}>
               Cancelar
             </Button>
             <Button
-              size="sm" className="h-7 text-xs glow-primary"
+              size="sm" className="h-9 sm:h-7 text-xs glow-primary"
               onClick={agregarGarante}
               disabled={saving || !nuevoGarante.garanteNombre.trim()}
             >
@@ -703,27 +705,27 @@ function GaranteEditInline({ garante, saving, onGuardar, onCancelar }: {
   return (
     <div className="flex flex-col gap-1 w-full p-2 rounded-lg bg-sky-500/10 border border-sky-500/30">
       <Input
-        className="h-7 text-xs"
+        className="h-9 sm:h-7 text-xs"
         placeholder="Nombre *"
         value={form.garanteNombre}
         onChange={(e) => setForm({ ...form, garanteNombre: e.target.value })}
       />
       <div className="grid grid-cols-2 gap-1">
         <Input
-          className="h-7 text-xs"
+          className="h-9 sm:h-7 text-xs"
           placeholder="Teléfono"
           value={form.garanteTelefono}
           onChange={(e) => setForm({ ...form, garanteTelefono: e.target.value })}
         />
         <Input
-          className="h-7 text-xs"
+          className="h-9 sm:h-7 text-xs"
           placeholder="CI"
           value={form.garanteCi}
           onChange={(e) => setForm({ ...form, garanteCi: e.target.value })}
         />
       </div>
       <Input
-        className="h-7 text-xs"
+        className="h-9 sm:h-7 text-xs"
         placeholder="Parentesco"
         value={form.garanteParentesco}
         onChange={(e) => setForm({ ...form, garanteParentesco: e.target.value })}

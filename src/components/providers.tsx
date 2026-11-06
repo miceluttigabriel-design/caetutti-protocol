@@ -32,7 +32,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
         >
           {children}
           <Toaster />
-          <SonnerToaster position="top-right" richColors closeButton />
+          <SonnerToaster
+            position="top-right"
+            richColors
+            closeButton
+            mobileOffset={{ top: "calc(env(safe-area-inset-top, 0px) + 8px)", left: 12, right: 12 }}
+          />
         </ThemeProvider>
       </QueryClientProvider>
     </SessionProvider>

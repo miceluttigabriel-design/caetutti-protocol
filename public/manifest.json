@@ -8,11 +8,18 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["standalone", "minimal-ui"],
+  "display_override": [
+    "standalone",
+    "minimal-ui"
+  ],
   "orientation": "any",
   "background_color": "#050807",
   "theme_color": "#050807",
-  "categories": ["business", "finance", "productivity"],
+  "categories": [
+    "business",
+    "finance",
+    "productivity"
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
@@ -45,14 +52,48 @@
       "short_name": "Notifs",
       "description": "Envío de mensajes WhatsApp",
       "url": "/?page=notificaciones",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     },
     {
       "name": "Clientes",
       "short_name": "Clientes",
       "description": "Gestión de deudores y codeudores",
       "url": "/?page=clientes",
-      "icons": [{ "src": "/icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Deudas",
+      "short_name": "Deudas",
+      "description": "Listado de deudas pendientes y cobradas",
+      "url": "/?page=cuotas",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Chats",
+      "short_name": "Chats",
+      "description": "Conversaciones de WhatsApp",
+      "url": "/?page=comunicaciones",
+      "icons": [
+        {
+          "src": "/icons/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
     }
   ]
 }

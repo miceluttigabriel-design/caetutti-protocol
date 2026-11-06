@@ -75,7 +75,7 @@ export function LoginScreen() {
   }
 
   return (
-    <div className="min-h-screen flex flicker matrix-bg">
+    <div className="min-h-dvh flex flicker matrix-bg">
       {/* Left: terminal boot + branding */}
       <div className="hidden lg:flex lg:w-1/2 flex-col justify-between p-12 relative overflow-hidden border-r border-primary/20">
         {/* Glow blobs */}
@@ -178,6 +178,10 @@ export function LoginScreen() {
                 placeholder="admin"
                 disabled={loading}
                 autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                enterKeyHint="next"
                 className="font-mono bg-black/40 border-primary/20 text-primary placeholder:text-primary/30"
               />
             </div>
@@ -193,6 +197,7 @@ export function LoginScreen() {
                 placeholder="••••••••"
                 disabled={loading}
                 autoComplete="current-password"
+                enterKeyHint="go"
                 className="font-mono bg-black/40 border-primary/20 text-primary placeholder:text-primary/30"
               />
             </div>

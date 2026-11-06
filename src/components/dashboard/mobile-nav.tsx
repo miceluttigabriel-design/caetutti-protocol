@@ -1,6 +1,7 @@
 "use client";
 
 import { LayoutDashboard, Users, CreditCard, Bell, MessageCircle, Clock, Settings, BookOpen, Phone, History, Menu, MapPin, LogOut } from "lucide-react";
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Sheet,
@@ -70,6 +71,9 @@ export function MobileNav({ currentPage, onNavigate, user, onLogout, sucursalFil
   const visibleItems = NAV_ITEMS.filter((item) => !item.permiso || hasPermission(user, item.permiso));
   const primary = visibleItems.filter((i) => PRIMARY.includes(i.id)).slice(0, 4);
   const rest = visibleItems.filter((i) => !primary.includes(i));
+  const [moreOpen, setMoreOpen] = useState(false);
+  const moreActive = rest.some((i) => i.id === currentPage);
+  const go = (page: PageKey) => { setMoreOpen(false); onNavigate(page); };
 
   const { data: sucursales } = useQuery({
     queryKey: ["sucursales"],
@@ -116,14 +120,17 @@ export function MobileNav({ currentPage, onNavigate, user, onLogout, sucursalFil
         })}
 
         {/* Más */}
-        <Sheet>
+        <Sheet open={moreOpen} onOpenChange={setMoreOpen}>
           <SheetTrigger asChild>
             <button
-              className="flex flex-col items-center justify-center gap-1 text-muted-foreground transition-colors active:bg-secondary/40"
+              className={`relative flex flex-col items-center justify-center gap-1 transition-colors active:bg-secondary/40 ${
+                moreActive ? "text-primary" : "text-muted-foreground"
+              }`}
               aria-label="Más secciones"
             >
               <Menu className="w-5 h-5" />
               <span className="text-[10px] leading-none font-medium">Más</span>
+              {moreActive && <span className="absolute top-0 left-1/4 right-1/4 h-0.5 bg-primary glow-primary" />}
             </button>
           </SheetTrigger>
           <SheetContent side="bottom" className="h-[75dvh] rounded-t-2xl border-primary/20 p-0 flex flex-col">
@@ -136,7 +143,7 @@ export function MobileNav({ currentPage, onNavigate, user, onLogout, sucursalFil
               </p>
             </SheetHeader>
 
-            <div className="flex-1 overflow-y-auto p-3 pb-6">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-3 pb-[calc(1.5rem+env(safe-area-inset-bottom))]">
               {/* Filtro de sucursal (mismo permiso que el topbar) */}
               {(user.permisos?.includes("*") || user.permisos?.includes("ver_sucursales")) && (
                 <div className="mb-4 flex items-center gap-2 px-3 py-2.5 rounded-lg border border-border/40 bg-secondary/40">
@@ -166,7 +173,7 @@ export function MobileNav({ currentPage, onNavigate, user, onLogout, sucursalFil
                       return (
                         <button
                           key={item.id}
-                          onClick={() => onNavigate(item.id)}
+                          onClick={() => go(item.id)}
                           className={`flex items-center gap-2.5 px-3 py-3 rounded-lg text-sm min-h-[48px] transition-colors ${
                             active
                               ? "bg-primary text-primary-foreground glow-primary"

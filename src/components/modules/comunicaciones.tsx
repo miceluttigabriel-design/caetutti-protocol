@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Send, MessageCircle, RefreshCw, X, Bot, Clock, History } from "lucide-react";
+import { Send, MessageCircle, RefreshCw, X, Bot, Clock, History, ArrowLeft } from "lucide-react";
 import { fmtRelative, fmtPhone } from "@/lib/format";
 import { toast } from "sonner";
 
@@ -31,9 +31,13 @@ export function ComunicacionesModule() {
   const convs = data?.conversaciones || [];
   const current = selected ? convs.find((c: any) => c.id === selected) : null;
 
-  // Auto-select first conversation
+  // Auto-seleccionar la primera conversación SOLO en pantallas grandes.
+  // En el celular se muestra primero la lista (como WhatsApp) y se entra al tocar.
   useEffect(() => {
-    if (!selected && convs.length > 0) setSelected(convs[0].id);
+    if (selected || convs.length === 0) return;
+    if (typeof window !== "undefined" && window.matchMedia("(min-width: 1024px)").matches) {
+      setSelected(convs[0].id);
+    }
   }, [convs, selected]);
 
   // Cargar mensajes de la conversación seleccionada
@@ -74,32 +78,37 @@ export function ComunicacionesModule() {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <div className="flex gap-1 p-1 rounded-lg glass-card">
+      <div className="flex items-center justify-between gap-2">
+        {/* Pestañas: en móvil solo aparecen dentro de una conversación abierta */}
+        <div className={`gap-1 p-1 rounded-lg glass-card ${selected ? "flex" : "hidden lg:flex"}`}>
           <Button variant={tab === "chat" ? "default" : "ghost"} size="sm" onClick={() => setTab("chat")}>
-            <MessageCircle className="w-3.5 h-3.5 mr-1" /> Conversación
+            <MessageCircle className="w-3.5 h-3.5 sm:mr-1" />
+            <span className="sm:hidden">Chat</span><span className="hidden sm:inline">Conversación</span>
           </Button>
           <Button variant={tab === "ia" ? "default" : "ghost"} size="sm" onClick={() => setTab("ia")}>
-            <Bot className="w-3.5 h-3.5 mr-1" /> Resumen IA
+            <Bot className="w-3.5 h-3.5 sm:mr-1" />
+            <span className="sm:hidden">IA</span><span className="hidden sm:inline">Resumen IA</span>
           </Button>
           <Button variant={tab === "historial" ? "default" : "ghost"} size="sm" onClick={() => setTab("historial")}>
-            <History className="w-3.5 h-3.5 mr-1" /> Historial
+            <History className="w-3.5 h-3.5 sm:mr-1" />
+            <span className="hidden sm:inline">Historial</span>
+            <span className="sm:hidden">Hist.</span>
           </Button>
         </div>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className={`w-3.5 h-3.5 mr-1 ${isFetching ? "animate-spin" : ""}`} /> Actualizar
+        <Button variant="outline" size="sm" className="ml-auto" onClick={() => refetch()} disabled={isFetching} aria-label="Actualizar">
+          <RefreshCw className={`w-3.5 h-3.5 sm:mr-1 ${isFetching ? "animate-spin" : ""}`} /> <span className="hidden sm:inline">Actualizar</span>
         </Button>
       </div>
 
-      <div className="grid lg:grid-cols-[280px_1fr] gap-3 h-[calc(100vh-220px)]">
-        {/* Lista conversaciones */}
-        <Card className="glass-card overflow-hidden flex flex-col">
+      <div className="flex flex-col lg:grid lg:grid-cols-[280px_1fr] gap-3 h-[calc(100dvh-14rem-env(safe-area-inset-top)-env(safe-area-inset-bottom))] min-h-[360px] lg:h-[calc(100dvh-220px)]">
+        {/* Lista conversaciones (en móvil: pantalla completa hasta que se elige una) */}
+        <Card className={`glass-card overflow-hidden flex-col flex-1 min-h-0 ${selected ? "hidden lg:flex" : "flex"}`}>
           <div className="p-3 border-b border-border/40">
             <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Conversaciones Activas ({convs.length})
             </p>
           </div>
-          <ScrollArea className="flex-1">
+          <ScrollArea className="flex-1 min-h-0">
             {isLoading && Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-16 m-2" />)}
             {!isLoading && convs.length === 0 && (
               <div className="p-6 text-center text-xs text-muted-foreground">
@@ -112,7 +121,7 @@ export function ComunicacionesModule() {
               <button
                 key={c.id}
                 onClick={() => setSelected(c.id)}
-                className={`w-full text-left p-3 border-b border-border/20 hover:bg-secondary/40 transition-colors ${
+                className={`w-full text-left p-3 min-h-[56px] border-b border-border/20 hover:bg-secondary/40 active:bg-secondary/60 transition-colors ${
                   selected === c.id ? "bg-primary/10" : ""
                 }`}
               >
@@ -140,7 +149,14 @@ export function ComunicacionesModule() {
 
         {/* Panel principal */}
         {current ? (
-          <Card className="glass-card flex flex-col overflow-hidden">
+          <Card className="glass-card flex flex-col flex-1 min-h-0 overflow-hidden">
+            {/* Volver a la lista (solo móvil) */}
+            <button
+              onClick={() => setSelected(null)}
+              className="lg:hidden flex items-center gap-2 px-3 py-2.5 text-sm text-primary border-b border-border/40 active:bg-secondary/40 text-left"
+            >
+              <ArrowLeft className="w-4 h-4" /> Conversaciones
+            </button>
             {tab === "chat" && (
               <ChatPanel
                 conv={convData?.conversacion || current}
@@ -154,7 +170,7 @@ export function ComunicacionesModule() {
             {tab === "historial" && <HistorialPanel telefono={current.telefono} />}
           </Card>
         ) : (
-          <Card className="glass-card flex items-center justify-center text-center p-8">
+          <Card className="glass-card hidden lg:flex items-center justify-center text-center p-8">
             <div>
               <MessageCircle className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-30" />
               <p className="text-sm text-muted-foreground">Selecciona una conversación para empezar</p>
@@ -168,6 +184,13 @@ export function ComunicacionesModule() {
 
 function ChatPanel({ conv, message, setMessage, onSend, sending }: any) {
   const mensajes = conv?.mensajes || [];
+  const endRef = useRef<HTMLDivElement>(null);
+
+  // Ir siempre al último mensaje al abrir o al llegar uno nuevo
+  useEffect(() => {
+    endRef.current?.scrollIntoView({ block: "end" });
+  }, [mensajes.length, conv?.telefono]);
+
   return (
     <>
       <div className="p-3 border-b border-border/40 flex items-center justify-between">
@@ -179,14 +202,14 @@ function ChatPanel({ conv, message, setMessage, onSend, sending }: any) {
           ● Activa
         </Badge>
       </div>
-      <ScrollArea className="flex-1 p-3">
+      <ScrollArea className="flex-1 min-h-0 p-3">
         <div className="space-y-2">
           {mensajes.length === 0 && (
             <p className="text-center text-xs text-muted-foreground py-6">No hay mensajes en esta conversación</p>
           )}
           {mensajes.map((m: any) => (
             <div key={m.id} className={`flex ${m.esEntrante ? "justify-start" : "justify-end"}`}>
-              <div className={`max-w-[75%] rounded-xl px-3 py-2 text-sm ${
+              <div className={`max-w-[85%] sm:max-w-[75%] break-words select-text rounded-xl px-3 py-2 text-sm ${
                 m.esEntrante
                   ? "bg-secondary/60"
                   : "bg-primary text-primary-foreground"
@@ -205,6 +228,7 @@ function ChatPanel({ conv, message, setMessage, onSend, sending }: any) {
               </div>
             </div>
           ))}
+          <div ref={endRef} />
         </div>
       </ScrollArea>
       <div className="p-3 border-t border-border/40 flex gap-2">
@@ -214,8 +238,11 @@ function ChatPanel({ conv, message, setMessage, onSend, sending }: any) {
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSend(); } }}
           placeholder="Escribe un mensaje…"
           disabled={sending}
+          enterKeyHint="send"
+          autoComplete="off"
+          className="h-11 lg:h-9"
         />
-        <Button onClick={onSend} disabled={sending || !message.trim()} className="glow-primary">
+        <Button onClick={onSend} disabled={sending || !message.trim()} className="glow-primary h-11 w-12 lg:h-9 lg:w-auto" aria-label="Enviar">
           {sending ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
         </Button>
       </div>

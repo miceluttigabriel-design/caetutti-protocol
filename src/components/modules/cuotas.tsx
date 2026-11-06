@@ -51,7 +51,7 @@ export function CuotasModule() {
             className="pl-9 glass-card"
           />
         </div>
-        <div className="flex gap-1 p-1 rounded-lg glass-card">
+        <div className="grid grid-cols-3 sm:flex gap-1 p-1 rounded-lg glass-card">
           {(["pendiente", "cobrada", "todas"] as const).map((e) => (
             <Button
               key={e}
@@ -66,7 +66,7 @@ export function CuotasModule() {
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card className="glass-card p-3">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Deudas</p>
           <p className="text-xl font-bold">{cuotas.length}</p>
@@ -75,14 +75,28 @@ export function CuotasModule() {
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Vencidas</p>
           <p className="text-xl font-bold text-red-400">{vencidas}</p>
         </Card>
-        <Card className="glass-card p-3">
+        <Card className="glass-card p-3 col-span-2 sm:col-span-1">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Saldo Pendiente</p>
           <p className="text-xl font-bold text-amber-400">{fmtGs(totalPendiente)}</p>
         </Card>
       </div>
 
       <Card className="glass-card overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* === Vista celular: tarjetas (< 768px) === */}
+        <div className="md:hidden divide-y divide-border/20">
+          {isLoading && Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="p-3"><Skeleton className="h-20" /></div>
+          ))}
+          {!isLoading && cuotas.length === 0 && (
+            <p className="text-center py-10 px-4 text-muted-foreground text-sm">No hay deudas que mostrar.</p>
+          )}
+          {!isLoading && cuotas.slice(0, 200).map((q: any) => (
+            <CuotaCard key={q.id} cuota={q} onView={() => setViewing(q)} onEdit={() => setEditing(q)} />
+          ))}
+        </div>
+
+        {/* === Vista tablet/escritorio: tabla (≥ 768px) === */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border/40 bg-secondary/30">
               <tr>
@@ -194,6 +208,74 @@ function CuotaRow({ cuota, onView, onEdit }: { cuota: any; onView: () => void; o
         </div>
       </td>
     </tr>
+  );
+}
+
+// Tarjeta para celular (misma lógica que la fila de la tabla)
+function CuotaCard({ cuota, onView, onEdit }: { cuota: any; onView: () => void; onEdit: () => void }) {
+  const qc = useQueryClient();
+  const toggle = useMutation({
+    mutationFn: async () => {
+      const r = await fetch("/api/cuotas", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: cuota.id, estado: cuota.estado === "pendiente" ? "cobrada" : "pendiente" }),
+      });
+      if (!r.ok) throw new Error();
+      return r.json();
+    },
+    onSuccess: () => { qc.invalidateQueries({ queryKey: ["cuotas"] }); toast.success("Estado actualizado"); },
+    onError: () => toast.error("Error al actualizar"),
+  });
+
+  const diasColor =
+    cuota.diasAtrasado > 60 ? "text-red-400" :
+    cuota.diasAtrasado > 30 ? "text-orange-400" :
+    cuota.diasAtrasado > 0 ? "text-amber-400" : "text-emerald-400";
+
+  return (
+    <div className="p-3 space-y-2">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-semibold leading-tight break-words">{cuota.cliente?.entidad}</p>
+          <p className="text-[11px] text-muted-foreground">{cuota.cliente?.codigoEntidad} · {cuota.descripcion || "—"}</p>
+          <p className="text-[11px] text-muted-foreground">
+            Vence {fmtDate(cuota.fechaVcto)}{cuota.sucursal?.nombre ? ` · ${cuota.sucursal.nombre}` : ""}
+          </p>
+        </div>
+        <div className="text-right shrink-0">
+          <p className="font-bold text-amber-400">{fmtGs(cuota.saldoGs)}</p>
+          <p className={`text-xs font-semibold ${diasColor}`}>
+            {cuota.diasAtrasado > 0 ? `+${cuota.diasAtrasado}d` : `${cuota.diasAtrasado}d`}
+          </p>
+          {cuota.montoEditado && (
+            <Badge variant="outline" className="text-[9px] py-0 px-1 text-amber-400 border-amber-500/30">editado</Badge>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-2">
+        {cuota.estado === "cobrada" ? (
+          <Badge className="bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/20"><CheckCircle2 className="w-3 h-3 mr-1" /> Cobrada</Badge>
+        ) : (
+          <Badge variant="outline" className="text-amber-400 border-amber-500/30"><Clock className="w-3 h-3 mr-1" /> Pendiente</Badge>
+        )}
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="sm" className="h-10 px-3" onClick={onView} aria-label="Ver detalle">
+            <Eye className="w-4 h-4" />
+          </Button>
+          <Button variant="outline" size="sm" className="h-10 px-3 text-amber-400" onClick={onEdit} aria-label="Editar monto y fecha">
+            <Edit2 className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline" size="sm"
+            className={`h-10 px-3 ${cuota.estado === "pendiente" ? "text-emerald-400" : "text-amber-400"}`}
+            onClick={() => toggle.mutate()} disabled={toggle.isPending}
+            aria-label={cuota.estado === "pendiente" ? "Marcar cobrada" : "Volver a pendiente"}
+          >
+            {cuota.estado === "pendiente" ? <CheckCircle2 className="w-4 h-4" /> : <Clock className="w-4 h-4" />}
+          </Button>
+        </div>
+      </div>
+    </div>
   );
 }
 

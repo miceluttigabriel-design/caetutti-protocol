@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { signOut, useSession } from "next-auth/react";
 import { Sidebar } from "./sidebar";
 import { Topbar } from "./topbar";
@@ -43,10 +43,43 @@ const PAGE_PERMISO: Record<PageKey, PermisoKey | null> = {
   "historial": "ver_historial",
 };
 
+const VALID_PAGES = Object.keys(PAGE_PERMISO) as PageKey[];
+
+function pageFromUrl(): PageKey {
+  if (typeof window === "undefined") return "dashboard";
+  const p = new URLSearchParams(window.location.search).get("page");
+  return p && (VALID_PAGES as string[]).includes(p) ? (p as PageKey) : "dashboard";
+}
+
 export function DashboardShell() {
   const { data: session } = useSession();
   const [page, setPage] = useState<PageKey>("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Navegación con historial: el botón "atrás" del celular vuelve a la sección
+  // anterior en vez de salir de la app. También soporta los atajos del manifest
+  // (/?page=clientes).
+  useEffect(() => {
+    const initial = pageFromUrl();
+    if (initial !== "dashboard") setPage(initial);
+    window.history.replaceState({ ...(window.history.state || {}), page: initial }, "");
+    const onPop = () => { setPage(pageFromUrl()); setSidebarOpen(false); };
+    window.addEventListener("popstate", onPop);
+    return () => window.removeEventListener("popstate", onPop);
+  }, []);
+
+  const navigate = useCallback((p: PageKey) => {
+    setSidebarOpen(false);
+    setPage((prev) => {
+      if (prev !== p) {
+        const url = p === "dashboard" ? window.location.pathname : `?page=${p}`;
+        window.history.pushState({ ...(window.history.state || {}), page: p }, "", url);
+      }
+      return p;
+    });
+    // Siempre arrancar la nueva sección desde arriba
+    window.scrollTo({ top: 0 });
+  }, []);
   const [sucursalFiltro, setSucursalFiltro] = useState<string>("__TODAS__");
 
   // Restaura sucursal seleccionada
@@ -66,10 +99,10 @@ export function DashboardShell() {
   const puedeVer = !permisoNecesario || hasPermission(user, permisoNecesario);
 
   return (
-    <div className="flex min-h-screen w-full">
+    <div className="flex min-h-dvh w-full">
       <Sidebar
         currentPage={page}
-        onNavigate={(p) => { setPage(p); setSidebarOpen(false); }}
+        onNavigate={navigate}
         user={user}
         onLogout={() => signOut({ callbackUrl: "/" })}
         isOpen={sidebarOpen}
@@ -92,7 +125,7 @@ export function DashboardShell() {
           onSucursalChange={setSucursalFiltro}
         />
 
-        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pb-24 lg:pb-6">
+        <main className="flex-1 overflow-y-auto p-3 sm:p-4 lg:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6">
           <InstallPrompt />
           {puedeVer ? (
             <div key={page} className="animate-fade-in">
@@ -115,7 +148,7 @@ export function DashboardShell() {
       {/* Barra inferior móvil (solo < lg) */}
       <MobileNav
         currentPage={page}
-        onNavigate={(p) => { setPage(p); setSidebarOpen(false); }}
+        onNavigate={navigate}
         user={user}
         onLogout={() => signOut({ callbackUrl: "/" })}
         sucursalFiltro={sucursalFiltro}
