@@ -42,6 +42,7 @@ async function apiJson(url: string, options?: RequestInit) {
 
 /** Pendientes de una campaña (calculado de los contadores, no de los contactos). */
 function pendientesDe(p: any): number {
+  if (typeof p.pendientes === "number") return p.pendientes;
   return Math.max(0, (p.totalContactos || 0) - (p.enviados || 0) - (p.errores || 0));
 }
 
@@ -71,7 +72,9 @@ export function PromocionesModule({ sucursal }: { sucursal: string }) {
         acc.campanas += 1;
         acc.contactos += p.totalContactos || 0;
         acc.enviados += p.enviados || 0;
-        acc.pendientes += Math.max(0, (p.totalContactos || 0) - (p.enviados || 0) - (p.errores || 0));
+        acc.pendientes += typeof p.pendientes === "number"
+          ? p.pendientes
+          : Math.max(0, (p.totalContactos || 0) - (p.enviados || 0) - (p.errores || 0));
         return acc;
       },
       { campanas: 0, contactos: 0, enviados: 0, pendientes: 0 }

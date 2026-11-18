@@ -25,7 +25,34 @@ export async function GET(req: NextRequest) {
     orderBy: { createdAt: "desc" },
   });
 
-  return ok({ promociones });
+  // Contadores reales por estado (los omitidos no son "pendientes").
+  const grupos = promociones.length
+    ? await db.promocionContacto.groupBy({
+        by: ["promocionId", "estado"],
+        where: { promocionId: { in: promociones.map((p) => p.id) } },
+        _count: { _all: true },
+      })
+    : [];
+
+  const porPromo = new Map<string, Record<string, number>>();
+  for (const g of grupos) {
+    const fila = porPromo.get(g.promocionId) || {};
+    fila[g.estado] = g._count._all;
+    porPromo.set(g.promocionId, fila);
+  }
+
+  return ok({
+    promociones: promociones.map((p) => {
+      const c = porPromo.get(p.id) || {};
+      return {
+        ...p,
+        pendientes: c.pendiente || 0,
+        omitidos: c.omitido || 0,
+        enviados: c.enviado ?? p.enviados,
+        errores: c.error ?? p.errores,
+      };
+    }),
+  });
 }
 
 /**
