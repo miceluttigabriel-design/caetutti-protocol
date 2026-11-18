@@ -10,6 +10,7 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string }> = {
   dashboard: { title: "Dashboard", subtitle: "Resumen general de cobranzas" },
   importar: { title: "Importar Datos", subtitle: "Carga masiva desde Excel o JSON" },
   clientes: { title: "Clientes", subtitle: "Gestión de deudores y codeudores" },
+  promociones: { title: "Promociones", subtitle: "Campañas de WhatsApp para vender y promocionar" },
   cuotas: { title: "Deudas", subtitle: "Listado de deudas pendientes y cobradas" },
   "mantenimiento-cuotas": { title: "Mantenimiento de Deudas", subtitle: "Operaciones masivas sobre deudas" },
   notificaciones: { title: "Notificaciones", subtitle: "Envío de mensajes WhatsApp" },

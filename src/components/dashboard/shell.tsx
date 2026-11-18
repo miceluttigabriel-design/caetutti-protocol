@@ -14,13 +14,14 @@ import { RecordatoriosModule } from "@/components/modules/recordatorios";
 import { ConfiguracionModule } from "@/components/modules/configuracion";
 import { ContactosDiaModule } from "@/components/modules/contactos-dia";
 import { HistorialModule } from "@/components/modules/historial";
+import { PromocionesModule } from "@/components/modules/promociones";
 import { MobileNav } from "./mobile-nav";
 import { InstallPrompt } from "@/components/pwa/install-prompt";
 import { hasPermission } from "@/lib/session";
 import { PermisoKey } from "@/lib/permisos";
 
 export type PageKey =
-  | "dashboard" | "clientes" | "cuotas" | "notificaciones"
+  | "dashboard" | "clientes" | "promociones" | "cuotas" | "notificaciones"
   | "comunicaciones" | "recordatorios" | "reglas"
   | "configuracion"
   | "admin-usuarios" | "admin-grupos"
@@ -29,6 +30,7 @@ export type PageKey =
 const PAGE_PERMISO: Record<PageKey, PermisoKey | null> = {
   dashboard: "ver_dashboard",
   clientes: "ver_clientes",
+  promociones: "ver_promociones",
   cuotas: "ver_cuotas",
   notificaciones: "ver_notificaciones",
   comunicaciones: "ver_comunicaciones",
@@ -162,6 +164,7 @@ function renderPage(page: PageKey, sucursal: string) {
   switch (page) {
     case "dashboard": return <DashboardPage sucursal={sucursal} />;
     case "clientes": return <ClientesModule sucursal={sucursal} />;
+    case "promociones": return <PromocionesModule sucursal={sucursal} />;
     case "cuotas": return <CuotasModule />;
     case "notificaciones": return <NotificacionesModule sucursal={sucursal} />;
     case "comunicaciones": return <ComunicacionesModule />;

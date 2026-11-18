@@ -46,6 +46,7 @@ model Empresa {
   metaUsoMensual  MetaUsoMensual[]
   metaMensajeLogs MetaMensajeLog[]
   garantes        Garante[]
+  promociones     Promocion[]
 }
 
 model Sucursal {
@@ -58,6 +59,7 @@ model Sucursal {
   cuotas    Cuota[]
   ventasMes VentaMes[]
   objetivos ObjetivoDinamico[]
+  promociones Promocion[]
 
   @@unique([empresaId, nombre])
 }
@@ -566,4 +568,59 @@ model Garante {
 
   @@index([empresaId, clienteId])
   @@index([clienteId])
+}
+
+// ============================================================================
+// PROMOCIONES / VENTAS POR WHATSAPP
+// ============================================================================
+// Campañas de mensajes para vender o promocionar. Se sube un Excel simple
+// (nombre + teléfono + modelo) y el sistema envía por API o abre wa.me.
+// No toca clientes, cuotas ni deudas: es un módulo aparte.
+
+model Promocion {
+  id           String   @id @default(cuid())
+  empresaId    String
+  empresa      Empresa  @relation(fields: [empresaId], references: [id], onDelete: Cascade)
+  sucursalId   String?
+  sucursal     Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  nombre       String                    // nombre de la campaña
+  descripcion  String?                   // para qué es (ej: promo diciembre)
+  mensaje      String                    // plantilla con {nombre}, {modelo}, {localidad}
+  modoEnvio    String   @default("manual") // manual | api | copiar
+  estado       String   @default("borrador") // borrador | enviando | finalizada
+
+  totalContactos Int    @default(0)      // se recalcula al importar
+  enviados       Int    @default(0)
+  errores        Int    @default(0)
+
+  creadoPor    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  contactos    PromocionContacto[]
+
+  @@index([empresaId, createdAt])
+}
+
+model PromocionContacto {
+  id           String   @id @default(cuid())
+  promocionId  String
+  promocion    Promocion @relation(fields: [promocionId], references: [id], onDelete: Cascade)
+
+  nombre       String
+  telefono     String                  // tal como vino en el Excel
+  telefonoNormalizado String?          // 595981123456, listo para la API
+  modelo       String?
+  localidad    String?
+  ci           String?
+  notas        String?
+
+  estado       String   @default("pendiente") // pendiente | enviado | error | omitido
+  errorDetalle String?
+  enviadoAt    DateTime?
+  createdAt    DateTime @default(now())
+
+  @@index([promocionId, estado])
+  @@index([telefono])
 }

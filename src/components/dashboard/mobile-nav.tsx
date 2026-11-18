@@ -1,6 +1,6 @@
 "use client";
 
-import { LayoutDashboard, Users, CreditCard, Bell, MessageCircle, Clock, Settings, BookOpen, Phone, History, Menu, MapPin, LogOut } from "lucide-react";
+import { LayoutDashboard, Users, CreditCard, Bell, MessageCircle, Clock, Settings, BookOpen, Phone, History, Menu, MapPin, LogOut, Megaphone } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -31,6 +31,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: "contactos-dia", label: "Contactos del Día", shortLabel: "Contactos", icon: <Phone className="w-5 h-5" />, permiso: "ver_contactos_dia", group: "Notificaciones" },
   { id: "historial", label: "Historial", shortLabel: "Historial", icon: <History className="w-5 h-5" />, permiso: "ver_historial", group: "Notificaciones" },
   { id: "clientes", label: "Clientes", shortLabel: "Clientes", icon: <Users className="w-5 h-5" />, permiso: "ver_clientes", group: "Negocio" },
+  { id: "promociones", label: "Promociones", shortLabel: "Promos", icon: <Megaphone className="w-5 h-5" />, permiso: "ver_promociones", group: "Negocio" },
   { id: "cuotas", label: "Deudas", shortLabel: "Deudas", icon: <CreditCard className="w-5 h-5" />, permiso: "ver_cuotas", group: "Negocio" },
   { id: "reglas", label: "Reglas", shortLabel: "Reglas", icon: <BookOpen className="w-5 h-5" />, permiso: "ver_reglas", group: "Configuración" },
   { id: "configuracion", label: "Configuración", shortLabel: "Ajustes", icon: <Settings className="w-5 h-5" />, permiso: "ver_configuracion", group: "Configuración" },

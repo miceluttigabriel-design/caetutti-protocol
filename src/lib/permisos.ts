@@ -5,6 +5,7 @@ export const PERMISOS = [
   { key: "ver_dashboard", label: "Dashboard", grupo: "General" },
   { key: "ver_importar", label: "Importar Datos", grupo: "General" },
   { key: "ver_clientes", label: "Clientes", grupo: "Negocio" },
+  { key: "ver_promociones", label: "Promociones / Ventas WhatsApp", grupo: "Negocio" },
   { key: "ver_cuotas", label: "Cuotas", grupo: "Negocio" },
   { key: "ver_mantenimiento_cuotas", label: "Mantenimiento Cuotas", grupo: "Negocio" },
   { key: "ver_ventas", label: "Ventas por Mes", grupo: "Negocio" },
@@ -24,7 +25,7 @@ export const PERMISOS = [
 export type PermisoKey = (typeof PERMISOS)[number]["key"];
 
 export function permisosByGrupo() {
-  const grupos: Record<string, typeof PERMISOS> = {};
+  const grupos: Record<string, (typeof PERMISOS)[number][]> = {};
   for (const p of PERMISOS) {
     if (!grupos[p.grupo]) grupos[p.grupo] = [];
     grupos[p.grupo].push(p);
