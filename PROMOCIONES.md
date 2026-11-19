@@ -57,11 +57,11 @@ Cosas que el sistema hace solo:
 ### Manual (ZapFast / wa.me) — no gasta API
 El sistema te muestra la lista. Tocás **Abrir en ZapFast** y pasa esto:
 
-1. Copia el mensaje ya personalizado al portapapeles.
-2. Abre (o trae al frente) **ZapFast** en el chat de ese contacto.
+1. ZapFast abre (o viene al frente) en el chat de ese contacto.
+2. El conector pega el mensaje personalizado y lo envía solo.
 
-Allá apretás **Ctrl+V** y enviás. El contacto queda **Pendiente** hasta que lo
-marcás como **Enviado** con el ✓ de la fila (o **Deshacer** si te equivocaste).
+El contacto queda **Pendiente**: marcalo como **Enviado** con el ✓ de la fila
+(o **Deshacer** si te equivocaste).
 
 Si en esa PC no tenés ZapFast, al lado está el botón **wa.me**, que abre
 WhatsApp normal (Web, escritorio o celular) con el texto ya escrito y lo marca
@@ -99,10 +99,10 @@ en masa: no tiene API pública ni bots.
 Lo que **sí** hace, y ya está conectado en el sistema:
 
 - Acepta que se le pase un número y **abre el chat de esa persona**, trayendo su
-  ventana al frente. No escribe el mensaje solo.
-- Por eso el botón **“Abrir en ZapFast”** hace dos cosas de una: **copia el
-  mensaje personalizado** y **abre el chat** en ZapFast. Allá apretás `Ctrl+V` y
-  enviás. Son dos teclas.
+  ventana al frente.
+- El botón **“Abrir en ZapFast”** le pasa también el mensaje. Un conector chico
+  instalado en la PC lo pega (`Ctrl+V`) y lo envía (`Enter`) solo. Vos tocás una
+  vez y el mensaje sale.
 - La **imagen** no viaja sola en este modo: en la ficha de la campaña tenés
   **Descargar imagen** y la adjuntás en ZapFast (que sí permite pegar fotos).
 
@@ -110,15 +110,18 @@ Lo que **sí** hace, y ya está conectado en el sistema:
 
 La primera vez, en cada computadora donde quieras usar ZapFast:
 
-1. En la campaña, modo **Manual**, tocá **“¿No abre? Ejecutá esto una sola vez”**.
+1. En la campaña, modo **Manual**, tocá **“ejecutá esto una sola vez”**.
 2. Se descarga `instalar-zapfast.cmd`. Abrilo (doble clic).
 3. Windows puede avisar que es un archivo descargado: **Más información →
    Ejecutar de todas formas**.
 4. Listo. No pide administrador: todo queda en tu usuario.
 
-Ese archivo solo registra el enlace `zapfast://` para que el navegador pueda
-abrir ZapFast. La primera vez el navegador pregunta **“¿Abrir ZapFast?”**;
-marcá que sí y listo.
+El instalador descarga el conector `abrir-zapfast.ps1` y registra el enlace
+`zapfast://`. La primera vez el navegador pregunta **“¿Abrir ZapFast?”**;
+marcá que sí (podés dejar “recordar”). Después ya no pregunta más.
+
+> Si ya habías instalado la versión anterior (la que solo abría el chat),
+> **volvé a ejecutar el instalador nuevo**: es el que pega y envía solo.
 
 > ZapFast es un cliente **no oficial**: WhatsApp puede sancionar la cuenta que lo
 > usa. Para envío masivo real y sin tocar teclas, seguí usando el modo
@@ -208,6 +211,7 @@ src/app/api/promociones/[id]/imagen/route.ts      (subir / quitar imagen)
 src/app/api/promociones/imagen/[token]/route.ts   (URL pública para WhatsApp)
 src/lib/promociones-imagen.ts                     (compresión en el navegador)
 public/zapfast/instalar-zapfast.cmd               (conecta ZapFast con el navegador)
+public/zapfast/abrir-zapfast.ps1                  (pega y envía en ZapFast)
 src/app/api/promociones/[id]/contactos/[contactoId]/route.ts (marcar manual)
 src/app/api/admin/setup-promociones/route.ts      (preparar/verificar tablas)
 ```

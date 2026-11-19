@@ -893,10 +893,12 @@ function DetalleCampana({
   /* -------------------- ZapFast (app de escritorio) -------------------- */
 
   /**
-   * Abre el chat del contacto en ZapFast y deja el mensaje en el portapapeles.
-   * ZapFast acepta un número o un link wa.me como argumento y trae su ventana
-   * al frente, pero no permite escribir el texto solo: por eso lo copiamos y
-   * el usuario pega con Ctrl+V.
+   * Abre el chat del contacto en ZapFast y le manda el mensaje.
+   *
+   * El texto viaja en la URL (`zapfast://telefono?text=...`). El conector que
+   * se instala una vez en la PC lo pone en el portapapeles, abre el chat,
+   * espera a que ZapFast esté al frente, pega con Ctrl+V y envía con Enter.
+   * Sin ese conector igual copiamos el mensaje acá, como respaldo.
    */
   const abrirZapFast = async (contacto: any) => {
     const mensaje = aplicarVariables(promocion.mensaje, contacto);
@@ -908,9 +910,17 @@ function DetalleCampana({
       return;
     }
 
-    window.location.href = `zapfast://${tel}`;
+    // Por la URL no conviene mandar textos enormes (Chrome y Windows tienen
+    // límites). Si el mensaje codificado entra, va directo; si no, se copia.
+    const codificado = encodeURIComponent(mensaje);
+    const automatico = codificado.length <= 1800;
+    window.location.href = automatico
+      ? `zapfast://${tel}?text=${codificado}`
+      : `zapfast://${tel}`;
 
-    if (copiado) {
+    if (automatico) {
+      toast.success("ZapFast está abriendo el chat, pegando y enviando el mensaje…");
+    } else if (copiado) {
       toast.success("Mensaje copiado. En ZapFast: Ctrl+V y Enter.");
     } else {
       toast.message("Se abrió ZapFast. Pegá el mensaje con Ctrl+V.");
@@ -1160,17 +1170,16 @@ function DetalleCampana({
 
           {promocion.modoEnvio === "manual" && pendientesCount > 0 && (
             <p className="text-[10px] text-muted-foreground">
-              “Abrir en ZapFast” copia el mensaje y abre el chat. Allá pegás con{" "}
-              <span className="text-foreground">Ctrl+V</span> y enviás. La primera vez,
-              el navegador te pregunta si querés abrir ZapFast.{" "}
+              “Abrir en ZapFast” abre el chat, pega el mensaje y lo envía solo
+              (tarda unos segundos). Si todavía no instalaste el conector,{" "}
               <a
                 href="/zapfast/instalar-zapfast.cmd"
                 download
                 className="text-primary hover:underline"
               >
-                ¿No abre? Ejecutá esto una sola vez
+                ejecutá esto una sola vez
               </a>
-              .
+              . La primera vez el navegador pregunta si querés abrir ZapFast.
             </p>
           )}
 
