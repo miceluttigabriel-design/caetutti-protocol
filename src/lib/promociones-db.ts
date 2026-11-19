@@ -26,6 +26,10 @@ const STMTS: string[] = [
     "creadoPor" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
+    "imagenToken" TEXT,
+    "imagenMime" TEXT,
+    "imagenNombre" TEXT,
+    "imagenBase64" TEXT,
     CONSTRAINT "Promocion_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE TABLE IF NOT EXISTS "PromocionContacto" (
@@ -45,6 +49,13 @@ const STMTS: string[] = [
     CONSTRAINT "PromocionContacto_pkey" PRIMARY KEY ("id")
   )`,
   `CREATE INDEX IF NOT EXISTS "Promocion_empresaId_createdAt_idx" ON "Promocion"("empresaId", "createdAt")`,
+  // Imagen opcional para las campañas. Va acá para que la tabla vieja (creada
+  // antes de esta función) también quede con las columnas.
+  `ALTER TABLE "Promocion" ADD COLUMN IF NOT EXISTS "imagenToken" TEXT`,
+  `ALTER TABLE "Promocion" ADD COLUMN IF NOT EXISTS "imagenMime" TEXT`,
+  `ALTER TABLE "Promocion" ADD COLUMN IF NOT EXISTS "imagenNombre" TEXT`,
+  `ALTER TABLE "Promocion" ADD COLUMN IF NOT EXISTS "imagenBase64" TEXT`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS "Promocion_imagenToken_key" ON "Promocion"("imagenToken")`,
   `CREATE INDEX IF NOT EXISTS "PromocionContacto_promocionId_estado_idx" ON "PromocionContacto"("promocionId", "estado")`,
   `CREATE INDEX IF NOT EXISTS "PromocionContacto_telefono_idx" ON "PromocionContacto"("telefono")`,
   `DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Promocion_empresaId_fkey') THEN ALTER TABLE "Promocion" ADD CONSTRAINT "Promocion_empresaId_fkey" FOREIGN KEY ("empresaId") REFERENCES "Empresa"("id") ON DELETE CASCADE ON UPDATE CASCADE; END IF; END $$;`,
@@ -118,6 +129,18 @@ export function normalizarContactosEntrantes(entrantes: unknown): ContactoParaIn
       notas: texto(c?.notas, 500),
     };
   });
+}
+
+/**
+ * Saca el base64 de la imagen antes de mandar la campaña al navegador.
+ * El panel solo necesita la URL pública (`/api/promociones/imagen/{token}`).
+ */
+export function promocionPublica<T extends Record<string, any>>(p: T) {
+  const { imagenBase64, ...resto } = p;
+  return {
+    ...resto,
+    imagenUrl: p.imagenToken ? `/api/promociones/imagen/${p.imagenToken}` : null,
+  };
 }
 
 /**

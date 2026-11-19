@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, ok, fail, unauthorized } from "@/lib/session";
-import { ensurePromocionesTables } from "@/lib/promociones-db";
+import { ensurePromocionesTables, promocionPublica } from "@/lib/promociones-db";
 import { MODOS_ENVIO } from "@/lib/promociones";
 
 export const dynamic = "force-dynamic";
@@ -74,7 +74,7 @@ export async function GET(
   }
 
   return ok({
-    promocion,
+    promocion: promocionPublica(promocion),
     contactos,
     totalFiltrado,
     totales,
@@ -123,7 +123,7 @@ export async function PATCH(
   }
 
   const promocion = await db.promocion.update({ where: { id }, data });
-  return ok({ promocion });
+  return ok({ promocion: promocionPublica(promocion) });
 }
 
 /** DELETE /api/promociones/[id] — borra la campaña y sus contactos. */

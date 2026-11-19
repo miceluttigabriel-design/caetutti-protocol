@@ -125,6 +125,20 @@ y cuotas que te van a gustar. ¿Te paso los detalles?
 
 En la ficha de la campaña ves la **vista previa** con el primer contacto.
 
+### Imagen de la promo (opcional)
+
+En **Nueva campaña** (o en **Editar**) podés elegir una imagen: la foto de la
+moto, el flyer, lo que quieras. Es opcional; si no ponés nada, va solo el texto.
+
+- Formatos: **JPG, PNG o WebP**. La imagen se achica y se comprime sola en tu
+  navegador antes de subirla (una foto de 5 MB queda en ~300 KB).
+- En **Automático (API)** se manda como **foto con el mensaje al pie**. WhatsApp
+  permite hasta **1024 caracteres** de pie de foto; si el mensaje es más largo
+  se recorta ahí (el texto completo queda en la campaña).
+- En **Manual** y **Copiar y pegar** el mensaje no lleva la foto: en la ficha de
+  la campaña tenés **Descargar imagen** y la adjuntás vos en WhatsApp.
+- Podés cambiarla o quitarla cuando quieras desde **Editar**.
+
 ---
 
 ## 5. Qué más podés hacer

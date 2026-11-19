@@ -3,10 +3,19 @@ import { db } from "@/lib/db";
 import { getSession, ok, fail, unauthorized } from "@/lib/session";
 import { ensurePromocionesTables } from "@/lib/promociones-db";
 import { aplicarVariables } from "@/lib/promociones";
-import { enviarMensajeTexto } from "@/lib/meta";
+import { enviarMensajeTexto, enviarImagenWhatsapp } from "@/lib/meta";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
+
+/** URL pública base para que WhatsApp pueda descargar la imagen. */
+function urlBase(req: NextRequest): string {
+  const configurada = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  if (configurada) return configurada;
+  const proto = req.headers.get("x-forwarded-proto") || "https";
+  const host = req.headers.get("x-forwarded-host") || req.headers.get("host");
+  return `${proto}://${host}`;
+}
 
 /**
  * POST /api/promociones/[id]/enviar
@@ -54,6 +63,11 @@ export async function POST(
   let enviados = 0;
   let errores = 0;
 
+  // Si la campaña tiene imagen, se manda como foto con el texto al pie.
+  const imagenUrl = promocion.imagenToken
+    ? `${urlBase(req)}/api/promociones/imagen/${promocion.imagenToken}`
+    : null;
+
   for (const contacto of pendientes) {
     const mensaje = aplicarVariables(promocion.mensaje, {
       nombre: contacto.nombre,
@@ -63,7 +77,9 @@ export async function POST(
     });
 
     try {
-      const r = await enviarMensajeTexto(config, contacto.telefonoNormalizado!, mensaje);
+      const r = imagenUrl
+        ? await enviarImagenWhatsapp(config, contacto.telefonoNormalizado!, imagenUrl, mensaje)
+        : await enviarMensajeTexto(config, contacto.telefonoNormalizado!, mensaje);
 
       if (r.success) {
         enviados++;

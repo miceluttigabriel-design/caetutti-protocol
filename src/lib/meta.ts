@@ -15,7 +15,7 @@
 
 import { db } from "./db";
 import type { ConfigEmpresa } from "@prisma/client";
-import { enviarMensajeDatafy, enviarTemplateDatafy } from "./datafy";
+import { enviarMensajeDatafy, enviarTemplateDatafy, enviarImagenDatafy } from "./datafy";
 import { normalizarTelefonoPY } from "./telefono";
 
 const META_API_VERSION = "v21.0";
@@ -131,6 +131,105 @@ export async function enviarMensajeTexto(
   } catch (e: any) {
     return { success: false, error: e.message };
   }
+}
+
+/**
+ * Envía una imagen con el texto como pie de foto (caption).
+ *
+ * La imagen tiene que estar en una URL pública: Meta (y Datafy) la descargan
+ * del servidor. El caption de WhatsApp admite hasta 1024 caracteres; si el
+ * mensaje es más largo se recorta para no perder el envío.
+ */
+export async function enviarImagenWhatsapp(
+  config: ConfigEmpresa,
+  telefono: string,
+  imagenUrl: string,
+  mensaje: string
+): Promise<MetaSendResult> {
+  const limiteCheck = await checkLimiteMensual(config.empresaId);
+  if (!limiteCheck.puedeEnviar) {
+    return {
+      success: false,
+      error: `Límite mensual alcanzado ($${limiteCheck.costoActual.toFixed(2)} / $${limiteCheck.limite.toFixed(2)}). ${
+        limiteCheck.bloqueado ? "Envíos bloqueados." : ""
+      }`,
+    };
+  }
+
+  const caption = recortarCaption(mensaje);
+
+  // === Datafy ===
+  if (config.whatsappProveedor === "datafy") {
+    const r = await enviarImagenDatafy(config, telefono, imagenUrl, caption);
+    const categoria: MetaCategoria = "SERVICE";
+    const costo = META_COSTOS_PARAGUAY[categoria];
+
+    if (r.success) {
+      await logMensaje(config.empresaId, telefono, r.messageId, categoria, "enviado", costo);
+      await incrementarUsoMensual(config.empresaId, categoria, costo);
+      return { success: true, messageId: r.messageId, categoria, costoEstimado: costo };
+    }
+    await logMensaje(config.empresaId, telefono, undefined, categoria, "fallido", 0, r.error);
+    return { success: false, error: r.error };
+  }
+
+  // === Meta Cloud API directo ===
+  if (!config.metaPhoneNumberId || !config.metaAccessToken) {
+    return { success: false, error: "Meta no configurado" };
+  }
+  const phoneNorm = normalizarTelefonoPY(telefono);
+  if (!phoneNorm) {
+    return { success: false, error: `Teléfono inválido: ${telefono}` };
+  }
+
+  try {
+    const url = `${META_GRAPH_URL}/${config.metaPhoneNumberId}/messages`;
+    const body = {
+      messaging_product: "whatsapp",
+      recipient_type: "individual",
+      to: phoneNorm,
+      type: "image",
+      image: {
+        link: imagenUrl,
+        ...(caption ? { caption } : {}),
+      },
+    };
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.metaAccessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      await logMensaje(config.empresaId, telefono, undefined, "SERVICE", "fallido", 0, JSON.stringify(data.error));
+      return { success: false, error: JSON.stringify(data.error) };
+    }
+
+    const messageId = data.messages?.[0]?.id;
+    const categoria: MetaCategoria = "SERVICE";
+    const costo = META_COSTOS_PARAGUAY[categoria];
+
+    await logMensaje(config.empresaId, telefono, messageId, categoria, "enviado", costo);
+    await incrementarUsoMensual(config.empresaId, categoria, costo);
+
+    return { success: true, messageId, categoria, costoEstimado: costo };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
+/** WhatsApp acepta hasta 1024 caracteres de pie de foto. */
+export const CAPTION_MAX = 1024;
+
+export function recortarCaption(mensaje: string): string {
+  const texto = String(mensaje || "").trim();
+  if (texto.length <= CAPTION_MAX) return texto;
+  return texto.slice(0, CAPTION_MAX - 1).trimEnd() + "…";
 }
 
 /**

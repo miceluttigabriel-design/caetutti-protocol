@@ -1,7 +1,7 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import { getSession, ok, fail, unauthorized, sucursalFilter } from "@/lib/session";
-import { ensurePromocionesTables, insertarContactosEnLotes, normalizarContactosEntrantes } from "@/lib/promociones-db";
+import { ensurePromocionesTables, insertarContactosEnLotes, normalizarContactosEntrantes, promocionPublica } from "@/lib/promociones-db";
 import { parsearExcelPromociones } from "@/lib/promociones-excel";
 import { MODOS_ENVIO, deduplicarPorTelefono } from "@/lib/promociones";
 
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
     promociones: promociones.map((p) => {
       const c = porPromo.get(p.id) || {};
       return {
-        ...p,
+        ...promocionPublica(p),
         pendientes: c.pendiente || 0,
         omitidos: c.omitido || 0,
         enviados: c.enviado ?? p.enviados,
@@ -155,7 +155,7 @@ export async function POST(req: NextRequest) {
 
   return ok(
     {
-      promocion: { ...promocion, totalContactos: filas.length },
+      promocion: { ...promocionPublica(promocion), totalContactos: filas.length },
       importados: filas.length,
       duplicados,
       sinNombre,

@@ -16,7 +16,7 @@ import {
 import {
   Megaphone, Plus, Upload, Trash2, Send, MessageCircle, Users,
   CheckCircle2, Search, FileSpreadsheet, StopCircle,
-  RefreshCw, Smartphone, Info, Copy,
+  RefreshCw, Smartphone, Info, Copy, ImagePlus, X, Download,
 } from "lucide-react";
 import { fmtDate, fmtPhone } from "@/lib/format";
 import {
@@ -24,6 +24,7 @@ import {
   MENSAJE_EJEMPLO, aplicarVariables, linkWhatsapp, modoLabel,
   copiarAlPortapapeles, deduplicarPorTelefono,
 } from "@/lib/promociones";
+import { prepararImagen, previewDeImagen } from "@/lib/promociones-imagen";
 import { toast } from "sonner";
 
 /* ------------------------------------------------------------------ */
@@ -333,6 +334,15 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
   const [verAyuda, setVerAyuda] = useState(false);
   const [cargando, setCargando] = useState<{ hecho: number; total: number } | null>(null);
 
+  // Imagen opcional de la campaña.
+  const [imagenFile, setImagenFile] = useState<File | null>(null);
+  const [imagenPreview, setImagenPreview] = useState<string | null>(null);
+  const [imagenAccion, setImagenAccion] = useState<"none" | "subir" | "borrar">("none");
+  const [preparandoImagen, setPreparandoImagen] = useState(false);
+
+  const imagenVisible =
+    imagenAccion === "borrar" ? null : imagenPreview || campana?.imagenUrl || null;
+
   const { data: sucData } = useQuery({
     queryKey: ["sucursales"],
     queryFn: () => apiJson("/api/sucursales"),
@@ -343,11 +353,30 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
   const guardar = useMutation({
     mutationFn: async () => {
       if (editando) {
-        return apiJson(`/api/promociones/${campana.id}`, {
+        const res = await apiJson(`/api/promociones/${campana.id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ nombre, descripcion, mensaje, modoEnvio }),
         });
+
+        if (imagenAccion === "subir" && imagenFile) {
+          const fd = new FormData();
+          fd.append("file", imagenFile);
+          const up = await apiJson(`/api/promociones/${campana.id}/imagen`, {
+            method: "POST",
+            body: fd,
+          });
+          return { ...res, promocion: up.promocion };
+        }
+
+        if (imagenAccion === "borrar") {
+          const del = await apiJson(`/api/promociones/${campana.id}/imagen`, {
+            method: "DELETE",
+          });
+          return { ...res, promocion: del.promocion };
+        }
+
+        return res;
       }
 
       if (!file) throw new Error("Subí el Excel con los contactos");
@@ -400,6 +429,22 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
         setCargando({ hecho: Math.min(i + LOTE_CONTACTOS, filas.length), total: filas.length });
       }
 
+      if (imagenFile) {
+        const fd = new FormData();
+        fd.append("file", imagenFile);
+        try {
+          const up = await apiJson(`/api/promociones/${id}/imagen`, {
+            method: "POST",
+            body: fd,
+          });
+          res.promocion = up.promocion;
+        } catch (e: any) {
+          // Los contactos ya quedaron cargados: no rompemos la creación por la
+          // foto. Avisamos y que la agregue editando la campaña.
+          toast.error(`Contactos cargados, pero la imagen falló: ${e.message}`);
+        }
+      }
+
       return {
         ...res,
         importados: filas.length,
@@ -428,6 +473,28 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
   });
 
   const insertarVariable = (v: string) => setMensaje((m) => `${m}${m.endsWith(" ") || !m ? "" : " "}${v}`);
+
+  const elegirImagen = async (f: File | null) => {
+    if (!f) return;
+    setPreparandoImagen(true);
+    try {
+      const lista = await prepararImagen(f);
+      const prev = await previewDeImagen(lista);
+      setImagenFile(lista);
+      setImagenPreview(prev);
+      setImagenAccion("subir");
+    } catch (e: any) {
+      toast.error(e.message);
+    } finally {
+      setPreparandoImagen(false);
+    }
+  };
+
+  const quitarImagen = () => {
+    setImagenFile(null);
+    setImagenPreview(null);
+    setImagenAccion(campana?.imagenUrl ? "borrar" : "none");
+  };
 
   return (
     <Dialog open onOpenChange={onClose}>
@@ -519,6 +586,55 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
                 </p>
               </div>
             )}
+          </div>
+
+          <div>
+            <Label className="text-xs">Imagen (opcional)</Label>
+            {imagenVisible ? (
+              <div className="mt-1 flex items-center gap-3">
+                <div className="relative w-24 h-24 rounded-lg overflow-hidden border border-border/50 bg-secondary/30">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={imagenVisible}
+                    alt="Imagen de la campaña"
+                    className="w-full h-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={quitarImagen}
+                    className="absolute top-1 right-1 w-5 h-5 rounded-full bg-black/70 text-white flex items-center justify-center hover:bg-black"
+                    aria-label="Quitar imagen"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+                <div className="text-[11px] text-muted-foreground">
+                  <p>Se manda como foto, con el mensaje al pie.</p>
+                  <p className="text-[10px]">La foto se achica sola antes de subirla.</p>
+                </div>
+              </div>
+            ) : (
+              <label className="mt-1 flex items-center gap-2 rounded-lg border border-dashed border-border/50 bg-secondary/20 px-3 py-3 cursor-pointer hover:bg-secondary/40 transition-colors">
+                <ImagePlus className="w-5 h-5 text-primary shrink-0" />
+                <span className="text-xs">
+                  {preparandoImagen ? "Preparando la imagen…" : "Elegir imagen (JPG, PNG o WebP)"}
+                </span>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  disabled={preparandoImagen}
+                  onChange={(e) => {
+                    elegirImagen(e.target.files?.[0] || null);
+                    e.currentTarget.value = "";
+                  }}
+                />
+              </label>
+            )}
+            <p className="text-[10px] text-muted-foreground mt-1">
+              Si no ponés imagen, va solo el texto. En modo manual la descargás y la
+              adjuntás vos en WhatsApp.
+            </p>
           </div>
 
           <div className="grid sm:grid-cols-2 gap-3">
@@ -888,6 +1004,39 @@ function DetalleCampana({
 
         {promocion.descripcion && (
           <p className="text-xs text-muted-foreground">{promocion.descripcion}</p>
+        )}
+
+        {promocion.imagenUrl && (
+          <div className="flex items-center gap-3 rounded-lg border border-border/40 bg-secondary/20 p-2">
+            <a
+              href={promocion.imagenUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="shrink-0"
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={promocion.imagenUrl}
+                alt="Imagen de la campaña"
+                className="w-16 h-16 rounded-md object-cover border border-border/40"
+              />
+            </a>
+            <div className="min-w-0 text-[11px]">
+              <p className="font-medium">Imagen de la campaña</p>
+              <p className="text-muted-foreground">
+                {promocion.modoEnvio === "api"
+                  ? "Se manda como foto, con el mensaje al pie (máx. 1024 caracteres)."
+                  : "Descargala y adjuntala a mano en WhatsApp junto con el mensaje."}
+              </p>
+              <a
+                href={promocion.imagenUrl}
+                download={promocion.imagenNombre || "promo.jpg"}
+                className="text-primary hover:underline inline-flex items-center gap-1 mt-0.5"
+              >
+                <Download className="w-3 h-3" /> Descargar imagen
+              </a>
+            </div>
+          </div>
         )}
 
         {/* Progreso */}

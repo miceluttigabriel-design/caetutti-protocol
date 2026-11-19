@@ -106,6 +106,67 @@ export async function enviarMensajeDatafy(
   }
 }
 
+/**
+ * Envía una imagen con texto al pie (caption) vía Datafy.
+ * El `link` tiene que ser una URL pública que Datafy pueda descargar.
+ */
+export async function enviarImagenDatafy(
+  config: ConfigEmpresa,
+  telefono: string,
+  imagenUrl: string,
+  caption: string
+): Promise<DatafySendResult> {
+  if (!config.datafyApiKey) {
+    return { success: false, error: "Datafy API Key no configurada" };
+  }
+  const phoneNumberId = config.metaPhoneNumberId;
+  if (!phoneNumberId) {
+    return { success: false, error: "Phone Number ID no configurado" };
+  }
+
+  const phoneNorm = normalizarTelefonoPY(telefono);
+  if (!phoneNorm) {
+    return { success: false, error: `Teléfono inválido: ${telefono}` };
+  }
+
+  const baseUrl = (config.datafyBaseUrl || "https://cloud.datafyapi.com.br/v1").replace(/\/$/, "");
+  const url = `${baseUrl}/${phoneNumberId}/messages`;
+
+  const cuerpo = caption.slice(0, 1024);
+
+  const body = {
+    messaging_product: "whatsapp",
+    recipient_type: "individual",
+    to: phoneNorm,
+    type: "image",
+    image: {
+      link: imagenUrl,
+      ...(cuerpo ? { caption: cuerpo } : {}),
+    },
+  };
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.datafyApiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    });
+
+    const data = await res.json();
+    if (!res.ok) {
+      const errMsg = data.error?.message || data.message || JSON.stringify(data.error || data);
+      return { success: false, error: errMsg };
+    }
+
+    return { success: true, messageId: data.messages?.[0]?.id };
+  } catch (e: any) {
+    return { success: false, error: e.message };
+  }
+}
+
 // ============================================================
 // ENVIAR MENSAJE CON PLANTILLA (template)
 // ============================================================
@@ -208,7 +269,7 @@ export async function verificarConexionDatafy(
     const data = await res.json();
     return {
       conectado: true,
-      channelId: config.datafyChannelId,
+      channelId: config.datafyChannelId ?? undefined,
       channelName: data.verified_name || config.datafyChannelName,
       phoneNumber: data.display_phone_number || config.datafyPhoneNumber,
       status: data.quality_rating || "connected",
