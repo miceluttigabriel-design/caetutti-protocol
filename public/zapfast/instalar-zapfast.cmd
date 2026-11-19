@@ -44,6 +44,9 @@ if not exist "%PS1%" (
   exit /b 1
 )
 
+rem Limpia la version vieja (la que solo abria el chat).
+if exist "%DIR%\abrir-zapfast.cmd" del /f /q "%DIR%\abrir-zapfast.cmd" >nul 2>&1
+
 reg add "HKCU\Software\Classes\zapfast" /ve /t REG_SZ /d "URL:ZapFast" /f >nul
 reg add "HKCU\Software\Classes\zapfast" /v "URL Protocol" /t REG_SZ /d "" /f >nul
 reg add "HKCU\Software\Classes\zapfast\DefaultIcon" /ve /t REG_SZ /d "%EXE%,0" /f >nul

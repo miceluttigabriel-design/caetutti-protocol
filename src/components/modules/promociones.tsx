@@ -914,9 +914,17 @@ function DetalleCampana({
     // límites). Si el mensaje codificado entra, va directo; si no, se copia.
     const codificado = encodeURIComponent(mensaje);
     const automatico = codificado.length <= 1800;
-    window.location.href = automatico
+    const url = automatico
       ? `zapfast://${tel}?text=${codificado}`
       : `zapfast://${tel}`;
+
+    // Un <a> oculto dispara el protocolo sin dejar la página "cargando".
+    const enlace = document.createElement("a");
+    enlace.href = url;
+    enlace.style.display = "none";
+    document.body.appendChild(enlace);
+    enlace.click();
+    setTimeout(() => enlace.remove(), 1000);
 
     if (automatico) {
       toast.success("ZapFast está abriendo el chat, pegando y enviando el mensaje…");
@@ -942,7 +950,7 @@ function DetalleCampana({
       } catch {
         // Si falla, queda pendiente y se puede reintentar.
       }
-    }, 8000);
+    }, 12000);
   };
 
   /* -------------------- Copiar y pegar (ZapFast / WhatsApp Web) -------------------- */
@@ -1189,7 +1197,7 @@ function DetalleCampana({
           {promocion.modoEnvio === "manual" && pendientesCount > 0 && (
             <p className="text-[10px] text-muted-foreground">
               “Abrir en ZapFast” abre el chat, pega el mensaje y lo envía solo
-              (tarda unos segundos). A los 8 segundos queda marcado como enviado:
+              (tarda unos segundos). A los 12 segundos queda marcado como enviado:
               si no salió, usá <span className="text-foreground">Deshacer</span> en la lista.
               Si todavía no instalaste el conector,{" "}
               <a
