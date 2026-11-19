@@ -752,6 +752,8 @@ function DetalleCampana({
   const [cargandoAgregar, setCargandoAgregar] = useState<{ hecho: number; total: number } | null>(null);
   const cancelarRef = useRef(false);
   const autoHecho = useRef(false);
+  const ultimoIntento = useRef<string | null>(null);
+  const [zapfastEnviando, setZapfastEnviando] = useState(false);
 
   const LIMITE = 100;
 
@@ -809,8 +811,13 @@ function DetalleCampana({
   /** Pide a la base el próximo pendiente (sin cargar los 70.000 en el navegador). */
   const siguientePendiente = async (): Promise<any | null> => {
     try {
-      const r = await apiJson(`/api/promociones/${id}?estado=pendiente&limit=1`);
-      return r.contactos?.[0] || null;
+      // Pedimos dos: si el primero es el que se acaba de abrir y todavía no
+      // se marcó como enviado, devolvemos el siguiente.
+      const r = await apiJson(`/api/promociones/${id}?estado=pendiente&limit=2`);
+      const lista: any[] = r.contactos || [];
+      const c = lista.find((x) => x.id !== ultimoIntento.current) || lista[0] || null;
+      if (c) ultimoIntento.current = c.id;
+      return c;
     } catch (e: any) {
       toast.error(e.message);
       return null;
@@ -901,6 +908,7 @@ function DetalleCampana({
    * Sin ese conector igual copiamos el mensaje acá, como respaldo.
    */
   const abrirZapFast = async (contacto: any) => {
+    setZapfastEnviando(true);
     const mensaje = aplicarVariables(promocion.mensaje, contacto);
     const copiado = await copiarAlPortapapeles(mensaje);
 
@@ -949,8 +957,10 @@ function DetalleCampana({
         });
       } catch {
         // Si falla, queda pendiente y se puede reintentar.
+      } finally {
+        setZapfastEnviando(false);
       }
-    }, 12000);
+    }, 10000);
   };
 
   /* -------------------- Copiar y pegar (ZapFast / WhatsApp Web) -------------------- */
@@ -1150,12 +1160,14 @@ function DetalleCampana({
                 <>
                   <Button
                     size="sm" className="h-8 text-xs glow-primary"
+                    disabled={zapfastEnviando}
                     onClick={async () => {
                       const c = await siguientePendiente();
                       if (c) abrirZapFast(c);
                     }}
                   >
-                    <Send className="w-3.5 h-3.5 mr-1.5" /> Abrir en ZapFast ({pendientesCount})
+                    <Send className="w-3.5 h-3.5 mr-1.5" />{" "}
+                    {zapfastEnviando ? "Enviando…" : `Abrir en ZapFast (${pendientesCount})`}
                   </Button>
                   <Button
                     size="sm" variant="outline" className="h-8 text-xs"
@@ -1197,7 +1209,7 @@ function DetalleCampana({
           {promocion.modoEnvio === "manual" && pendientesCount > 0 && (
             <p className="text-[10px] text-muted-foreground">
               “Abrir en ZapFast” abre el chat, pega el mensaje y lo envía solo
-              (tarda unos segundos). A los 12 segundos queda marcado como enviado:
+              (tarda unos segundos). A los 10 segundos queda marcado como enviado:
               si no salió, usá <span className="text-foreground">Deshacer</span> en la lista.
               Si todavía no instalaste el conector,{" "}
               <a
@@ -1323,6 +1335,7 @@ function DetalleCampana({
                       <Button
                         size="sm" variant="outline" className="h-7 text-[10px] shrink-0"
                         onClick={() => abrirZapFast(c)}
+                        disabled={zapfastEnviando}
                         title="Copiar el mensaje y abrir el chat en ZapFast"
                       >
                         <Send className="w-3 h-3 mr-1" /> ZapFast
