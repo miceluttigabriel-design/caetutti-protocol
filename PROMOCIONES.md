@@ -102,8 +102,9 @@ Lo que **sí** hace, y ya está conectado en el sistema:
 - Acepta que se le pase un número y **abre el chat de esa persona**, trayendo su
   ventana al frente.
 - El botón **“Abrir en ZapFast”** le pasa también el mensaje. Un conector chico
-  instalado en la PC lo pega (`Ctrl+V`) y lo envía (`Enter`) solo. Vos tocás una
-  vez y el mensaje sale.
+  instalado en la PC abre el chat, **maximiza ZapFast** para que el cuadro de
+  texto quede a la vista, hace clic en el cuadro, pega (`Ctrl+V`) y envía
+  (`Enter`) solo. Vos tocás una vez y el mensaje sale.
 - La **imagen** no viaja sola en este modo: en la ficha de la campaña tenés
   **Descargar imagen** y la adjuntás en ZapFast (que sí permite pegar fotos).
 
@@ -234,10 +235,12 @@ y `topbar.tsx` para que **Promociones** aparezca en el menú.
 1. Esperá 3 a 6 segundos: primero abre el chat, después pega y por último envía.
 2. Mirá el registro que deja el conector en esta PC:
    `C:\Users\usuario\AppData\Local\ZapFastAbrir\ultimo-intento.txt`
-   - `portapapeles=True` y `pegado y Enter enviados` → salió.
+   - `portapapeles=True`, `clique en el cuadro de texto` y
+     `pegado y Enter enviados` → salió.
    - `portapapeles=False` → Windows no dejó usar el portapapeles; el conector
      escribe el texto tecla por tecla como respaldo.
-   - `no pude activar la ventana` → ZapFast tardó en abrir; probá de nuevo.
+   - `no pude poner la ventana al frente` o `perdi el foco` → Windows no dejó
+     activar ZapFast; volvé a tocar el botón.
    - `no es zapfast://` → volvé a ejecutar el instalador.
 3. Si el texto aparece en el cuadro pero no se envía, revisá en la
    configuración de ZapFast que **Enter envíe el mensaje**.

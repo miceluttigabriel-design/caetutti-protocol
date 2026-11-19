@@ -43,7 +43,7 @@ function Log([string]$msg) {
   } catch {}
 }
 
-Log "inicio | conector v5"
+Log "inicio | conector v5.1"
 
 if (-not $Url) { Log "sin URL"; exit 0 }
 
@@ -151,8 +151,7 @@ public class VentanaZap {
     IntPtr h = Buscar(pid);
     if (h == IntPtr.Zero) return IntPtr.Zero;
 
-    ShowWindow(h, 9);   // SW_RESTORE
-    ShowWindow(h, 5);   // SW_SHOW
+    ShowWindow(h, 3);   // SW_MAXIMIZE: siempre entra en la pantalla
     BringWindowToTop(h);
     SetForegroundWindow(h);
 
@@ -223,18 +222,29 @@ Log "ventana al frente (handle $h)"
 if ($arranqueFrio) {
   Log "arranque en frio: espero a que cargue"
   Start-Sleep -Seconds 7
-  [void][VentanaZap]::Activar([uint32]$zproc.Id)
-  Start-Sleep -Milliseconds 1500
 } else {
   Start-Sleep -Milliseconds 2200
-  [void][VentanaZap]::Activar([uint32]$zproc.Id)
-  Start-Sleep -Milliseconds 600
 }
 
-if (-not [VentanaZap]::AlFrente($h)) {
+# Al arrancar, ZapFast puede cambiar de ventana (carga -> principal).
+# La volvemos a buscar y la maximizamos para que el cuadro de texto quede
+# dentro de la pantalla.
+$h = [IntPtr]::Zero
+for ($i = 0; $i -lt 24; $i++) {
+  $zproc = Get-Process zapfast -ErrorAction SilentlyContinue | Select-Object -First 1
+  if ($zproc) {
+    $h = [VentanaZap]::Activar([uint32]$zproc.Id)
+    if ($h -ne [IntPtr]::Zero -and [VentanaZap]::AlFrente($h)) { break }
+  }
+  Start-Sleep -Milliseconds 500
+}
+
+if ($h -eq [IntPtr]::Zero -or -not [VentanaZap]::AlFrente($h)) {
   Log "perdi el foco antes de escribir"
   exit 0
 }
+
+Start-Sleep -Milliseconds 700
 
 # --- Un clic en el cuadro de texto para que tome el foco ------------
 $r = New-Object 'VentanaZap+RECT'
