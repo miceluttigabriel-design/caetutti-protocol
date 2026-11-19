@@ -9,6 +9,7 @@ param([string]$Url)
 # El mensaje viaja en la URL (no depende del portapapeles del navegador):
 # este script lo pone en el portapapeles de Windows, abre el chat, espera
 # a que ZapFast este al frente, pega con Ctrl+V y manda con Enter.
+# Si no puede copiar al portapapeles, abre el chat y NO envia nada.
 # ------------------------------------------------------------------
 
 $ErrorActionPreference = "SilentlyContinue"
@@ -27,15 +28,27 @@ if ($m.Groups[2].Success -and $m.Groups[2].Value) {
 $exe = Join-Path $env:LOCALAPPDATA "Programs\ZapFast\zapfast.exe"
 if (-not (Test-Path $exe)) { exit 0 }
 
+$clipOk = $false
 if ($texto) {
-  Set-Clipboard -Value $texto
+  try {
+    Set-Clipboard -Value $texto
+    $clipOk = $true
+  } catch {
+    try {
+      Add-Type -AssemblyName System.Windows.Forms
+      [System.Windows.Forms.Clipboard]::SetText($texto)
+      $clipOk = $true
+    } catch {
+      $clipOk = $false
+    }
+  }
 }
 
 Start-Process -FilePath $exe -ArgumentList $tel
 
-# Si no vino texto (mensaje muy largo), solo abrimos el chat: no tocamos
-# el portapapeles ni mandamos nada para no enviar algo que no corresponde.
-if (-not $texto) { exit 0 }
+# Si no vino texto (mensaje muy largo) o no se pudo copiar, solo abrimos el
+# chat: no mandamos nada para no enviar algo que no corresponde.
+if (-not $texto -or -not $clipOk) { exit 0 }
 
 $ws = New-Object -ComObject WScript.Shell
 $activo = $false

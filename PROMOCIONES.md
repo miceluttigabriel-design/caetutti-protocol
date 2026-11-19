@@ -60,8 +60,9 @@ El sistema te muestra la lista. Tocás **Abrir en ZapFast** y pasa esto:
 1. ZapFast abre (o viene al frente) en el chat de ese contacto.
 2. El conector pega el mensaje personalizado y lo envía solo.
 
-El contacto queda **Pendiente**: marcalo como **Enviado** con el ✓ de la fila
-(o **Deshacer** si te equivocaste).
+El contacto se marca como **Enviado** a los 8 segundos (le da tiempo a ZapFast
+a pegar y mandar). Si no salió, tocá **Deshacer** en la lista y queda pendiente
+otra vez.
 
 Si en esa PC no tenés ZapFast, al lado está el botón **wa.me**, que abre
 WhatsApp normal (Web, escritorio o celular) con el texto ya escrito y lo marca
