@@ -228,3 +228,21 @@ y `topbar.tsx` para que **Promociones** aparezca en el menú.
 2. Si es error de permisos, el usuario de `DATABASE_URL` necesita permiso
    de `CREATE` en el schema.
 3. Último recurso: `npx prisma db push` apuntando a la base de producción.
+
+### Si ZapFast abre pero no manda el mensaje
+
+1. Esperá 3 a 6 segundos: primero abre el chat, después pega y por último envía.
+2. Mirá el registro que deja el conector en esta PC:
+   `C:\Users\usuario\AppData\Local\ZapFastAbrir\ultimo-intento.txt`
+   - `portapapeles=True` y `pegado y Enter enviados` → salió.
+   - `portapapeles=False` → Windows no dejó usar el portapapeles; el conector
+     escribe el texto tecla por tecla como respaldo.
+   - `no pude activar la ventana` → ZapFast tardó en abrir; probá de nuevo.
+   - `no es zapfast://` → volvé a ejecutar el instalador.
+3. Si el texto aparece en el cuadro pero no se envía, revisá en la
+   configuración de ZapFast que **Enter envíe el mensaje**.
+4. Si no aparece nada, cerrá ZapFast del todo (icono de la bandeja →
+   **Quit**) y abrilo otra vez: a veces queda a medias la conexión con el
+   teléfono.
+5. Si en esa PC nunca instalaste el conector, en la campaña tocá
+   **“ejecutá esto una sola vez”** y volvé a probar.
