@@ -22,7 +22,7 @@ import { fmtDate, fmtPhone } from "@/lib/format";
 import {
   MODOS_ENVIO, ESTADOS_PROMO, ESTADOS_CONTACTO, VARIABLES_PROMO,
   MENSAJE_EJEMPLO, aplicarVariables, linkWhatsapp, modoLabel,
-  copiarAlPortapapeles,
+  copiarAlPortapapeles, deduplicarPorTelefono,
 } from "@/lib/promociones";
 import { toast } from "sonner";
 
@@ -36,9 +36,32 @@ const SELECT_CLASS =
 async function apiJson(url: string, options?: RequestInit) {
   const r = await fetch(url, options);
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error(data?.error || "Error de red");
+  if (!r.ok) {
+    const detalle =
+      data?.error ||
+      (r.status === 413
+        ? "El archivo es demasiado grande para el servidor"
+        : `Error ${r.status} del servidor`);
+    throw new Error(detalle);
+  }
   return data;
 }
+
+/** Reintenta una llamada si falla por red o por un 5xx transitorio. */
+async function conReintento<T>(fn: () => Promise<T>, intentos = 3): Promise<T> {
+  let ultimo: any;
+  for (let i = 0; i < intentos; i++) {
+    try {
+      return await fn();
+    } catch (e) {
+      ultimo = e;
+      if (i < intentos - 1) await new Promise((r) => setTimeout(r, 700 * (i + 1)));
+    }
+  }
+  throw ultimo;
+}
+
+const LOTE_CONTACTOS = 2000;
 
 /** Pendientes de una campaña (calculado de los contadores, no de los contactos). */
 function pendientesDe(p: any): number {
@@ -308,6 +331,7 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
   );
   const [file, setFile] = useState<File | null>(null);
   const [verAyuda, setVerAyuda] = useState(false);
+  const [cargando, setCargando] = useState<{ hecho: number; total: number } | null>(null);
 
   const { data: sucData } = useQuery({
     queryKey: ["sucursales"],
@@ -327,17 +351,65 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
       }
 
       if (!file) throw new Error("Subí el Excel con los contactos");
-      const fd = new FormData();
-      fd.append("nombre", nombre);
-      fd.append("descripcion", descripcion);
-      fd.append("mensaje", mensaje);
-      fd.append("modoEnvio", modoEnvio);
-      if (sucursalId) fd.append("sucursalId", sucursalId);
-      fd.append("file", file);
 
-      return apiJson("/api/promociones", { method: "POST", body: fd });
+      // El Excel se lee acá, en el navegador: un archivo de 4 MB con 100.000
+      // filas no puede viajar entero a Vercel (límite de 4,5 MB) ni entrar en
+      // un solo INSERT. Se manda en tandas de 2.000 contactos.
+      const { parsearExcelPromociones } = await import("@/lib/promociones-excel");
+      const parseo = parsearExcelPromociones(await file.arrayBuffer());
+      if (parseo.filas.length === 0) {
+        throw new Error(
+          "No encontré contactos. Revisá que el Excel tenga una columna de nombre y otra de teléfono."
+        );
+      }
+
+      const { filas, duplicados } = deduplicarPorTelefono(parseo.filas);
+      if (filas.length === 0) throw new Error("El archivo no tenía contactos válidos");
+
+      setCargando({ hecho: 0, total: filas.length });
+
+      const cabecera = {
+        nombre,
+        descripcion,
+        mensaje,
+        modoEnvio,
+        sucursalId: sucursalId || null,
+      };
+
+      const primero = filas.slice(0, LOTE_CONTACTOS);
+      const res = await conReintento(() =>
+        apiJson("/api/promociones", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...cabecera, contactos: primero }),
+        })
+      );
+      setCargando({ hecho: primero.length, total: filas.length });
+
+      const id = res.promocion.id;
+
+      for (let i = LOTE_CONTACTOS; i < filas.length; i += LOTE_CONTACTOS) {
+        const lote = filas.slice(i, i + LOTE_CONTACTOS);
+        await conReintento(() =>
+          apiJson(`/api/promociones/${id}/importar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contactos: lote }),
+          })
+        );
+        setCargando({ hecho: Math.min(i + LOTE_CONTACTOS, filas.length), total: filas.length });
+      }
+
+      return {
+        ...res,
+        importados: filas.length,
+        duplicados,
+        sinTelefono: parseo.sinTelefono,
+        sinNombre: parseo.sinNombre,
+      };
     },
     onSuccess: (res: any) => {
+      setCargando(null);
       if (editando) {
         toast.success("Campaña actualizada");
         onSaved(campana.id);
@@ -349,7 +421,10 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
         onSaved(res.promocion.id);
       }
     },
-    onError: (e: any) => toast.error(e.message),
+    onError: (e: any) => {
+      setCargando(null);
+      toast.error(e.message);
+    },
   });
 
   const insertarVariable = (v: string) => setMensaje((m) => `${m}${m.endsWith(" ") || !m ? "" : " "}${v}`);
@@ -497,14 +572,38 @@ function CampanaDialog({ sucursal, campana, onClose, onSaved }: {
           )}
         </div>
 
+        {cargando && (
+          <div className="space-y-1.5 rounded-lg border border-border/40 bg-secondary/20 p-2.5">
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground">
+                Leyendo el Excel y cargando contactos…
+              </span>
+              <span className="font-medium">
+                {cargando.hecho.toLocaleString("es-PY")} / {cargando.total.toLocaleString("es-PY")}
+              </span>
+            </div>
+            <Progress
+              value={cargando.total > 0 ? (cargando.hecho / cargando.total) * 100 : 5}
+              className="h-1.5"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              No cierres esta ventana. Un archivo de 100.000 filas tarda un par de minutos.
+            </p>
+          </div>
+        )}
+
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose} disabled={guardar.isPending}>
+            {cargando ? "Esperá…" : "Cancelar"}
+          </Button>
           <Button
             onClick={() => guardar.mutate()}
             disabled={guardar.isPending || !nombre.trim() || !mensaje.trim() || (!editando && !file)}
           >
             {guardar.isPending
-              ? "Guardando…"
+              ? cargando
+                ? `Cargando ${cargando.hecho.toLocaleString("es-PY")} de ${cargando.total.toLocaleString("es-PY")}…`
+                : "Preparando…"
               : editando ? "Guardar cambios" : "Crear y cargar contactos"}
           </Button>
         </DialogFooter>
@@ -534,6 +633,7 @@ function DetalleCampana({
   const [enviando, setEnviando] = useState(false);
   const [progreso, setProgreso] = useState<{ enviados: number; errores: number; total: number } | null>(null);
   const [subiendo, setSubiendo] = useState(false);
+  const [cargandoAgregar, setCargandoAgregar] = useState<{ hecho: number; total: number } | null>(null);
   const cancelarRef = useRef(false);
   const autoHecho = useRef(false);
 
@@ -719,15 +819,36 @@ function DetalleCampana({
     if (!file) return;
     setSubiendo(true);
     try {
-      const fd = new FormData();
-      fd.append("file", file);
-      const r = await apiJson(`/api/promociones/${id}/importar`, { method: "POST", body: fd });
-      toast.success(`${r.agregados} contactos agregados (total ${r.total})`);
+      const { parsearExcelPromociones } = await import("@/lib/promociones-excel");
+      const parseo = parsearExcelPromociones(await file.arrayBuffer());
+      if (parseo.filas.length === 0) throw new Error("No encontré contactos en el archivo");
+
+      const { filas } = deduplicarPorTelefono(parseo.filas);
+      let agregados = 0;
+      let total = promocion.totalContactos || 0;
+      setCargandoAgregar({ hecho: 0, total: filas.length });
+
+      for (let i = 0; i < filas.length; i += LOTE_CONTACTOS) {
+        const lote = filas.slice(i, i + LOTE_CONTACTOS);
+        const r = await conReintento(() =>
+          apiJson(`/api/promociones/${id}/importar`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ contactos: lote }),
+          })
+        );
+        agregados += r.agregados || 0;
+        total = r.total || total;
+        setCargandoAgregar({ hecho: Math.min(i + LOTE_CONTACTOS, filas.length), total: filas.length });
+      }
+
+      toast.success(`${agregados} contactos agregados (total ${total})`);
       await refrescarTodo();
     } catch (e: any) {
       toast.error(e.message);
     } finally {
       setSubiendo(false);
+      setCargandoAgregar(null);
     }
   };
 
@@ -848,6 +969,13 @@ function DetalleCampana({
               <RefreshCw className="w-3.5 h-3.5" />
             </Button>
           </div>
+
+          {subiendo && cargandoAgregar && (
+            <p className="text-[11px] text-sky-300">
+              Cargando {cargandoAgregar.hecho.toLocaleString("es-PY")} de{" "}
+              {cargandoAgregar.total.toLocaleString("es-PY")} contactos…
+            </p>
+          )}
 
           {enviando && progreso && (
             <p className="text-[11px] text-amber-300">

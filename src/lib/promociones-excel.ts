@@ -1,5 +1,5 @@
 import * as XLSX from "xlsx";
-import { normalizarTelefonoPY } from "@/lib/meta";
+import { normalizarCelularPY } from "@/lib/telefono";
 import { ALIAS_COLUMNAS, buscarValor } from "@/lib/promociones";
 
 export interface FilaPromo {
@@ -56,7 +56,7 @@ export function parsearExcelPromociones(buffer: ArrayBuffer): ResultadoParseo {
     filas.push({
       nombre,
       telefono,
-      telefonoNormalizado: normalizarTelefonoPY(telefono),
+      telefonoNormalizado: normalizarCelularPY(telefono),
       modelo: buscarValor(fila, [...ALIAS_COLUMNAS.modelo]),
       localidad: buscarValor(fila, [...ALIAS_COLUMNAS.localidad]),
       ci: buscarValor(fila, [...ALIAS_COLUMNAS.ci]),

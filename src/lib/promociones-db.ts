@@ -90,6 +90,36 @@ export interface ContactoParaInsertar {
   notas: string | null;
 }
 
+const MAX_LOTE = 3000;
+
+function texto(v: unknown, max = 500): string | null {
+  const t = String(v ?? "").trim();
+  return t ? t.slice(0, max) : null;
+}
+
+/**
+ * Toma el array que manda el navegador (el Excel se lee allá) y lo deja
+ * listo para insertar. No confía en el estado ni en el teléfono normalizado:
+ * los vuelve a validar acá.
+ */
+export function normalizarContactosEntrantes(entrantes: unknown): ContactoParaInsertar[] {
+  if (!Array.isArray(entrantes)) return [];
+
+  return entrantes.slice(0, MAX_LOTE).map((c: any) => {
+    const telefono = String(c?.telefono ?? "").trim().slice(0, 40);
+    const normalizado = c?.telefonoNormalizado ? String(c.telefonoNormalizado) : "";
+    return {
+      nombre: String(c?.nombre ?? "").trim().slice(0, 200) || "Sin nombre",
+      telefono,
+      telefonoNormalizado: /^595\d{9}$/.test(normalizado) ? normalizado : null,
+      modelo: texto(c?.modelo, 200),
+      localidad: texto(c?.localidad, 200),
+      ci: texto(c?.ci, 50),
+      notas: texto(c?.notas, 500),
+    };
+  });
+}
+
 /**
  * Inserta los contactos en lotes de 500. Un Excel grande (100.000 filas) no
  * entra en un solo INSERT: PostgreSQL tiene un límite de parámetros por query.
@@ -114,7 +144,7 @@ export async function insertarContactosEnLotes(
         ci: f.ci,
         notas: f.notas,
         estado: f.telefonoNormalizado ? "pendiente" : "omitido",
-        errorDetalle: f.telefonoNormalizado ? null : "Teléfono inválido",
+        errorDetalle: f.telefonoNormalizado ? null : "No es un celular paraguayo",
       })),
     });
     insertados += lote.length;

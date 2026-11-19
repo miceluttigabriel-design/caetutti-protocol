@@ -144,16 +144,16 @@ En la ficha de la campaña ves la **vista previa** con el primer contacto.
 Probado con `grid_cat_entidad.xlsx` (101.122 filas, 4,4 MB):
 
 - Detecta **Nombre**, **Telefono** y toma **Documento** como CI.
-- Carga **72.913 contactos únicos** con teléfono válido (el resto: 21.000 sin
-  teléfono y 6.941 repetidos, se saltean solos).
-- La carga va en lotes de 500 para que no reviente la base.
+- Carga **72.906 contactos únicos** con celular válido (el resto: ~21.000 sin
+  teléfono, 8.142 que no son celulares y 6.941 repetidos, se saltean solos).
+- El Excel se lee **en tu navegador** y se manda al servidor en tandas de 2.000
+  contactos. Por eso no importa el peso del archivo ni el límite de Vercel.
 - La ficha de la campaña **no** trae los 72.000 de golpe: pagina de a 100 con
   filtros y buscador del lado del servidor.
 
-> El archivo tiene que pesar menos de **4,5 MB** (límite de subida de Vercel).
-> Si te pasás, partilo en dos hojas o dos archivos y usá “Agregar contactos”.
-> Un Excel de 100.000 filas tarda unos 20-40 segundos en cargar.
-- **Borrar** una campaña completa (borra sus contactos, nada más).
+> Un Excel de 100.000 filas tarda un par de minutos. Dejá la ventana abierta:
+> abajo ves “Cargando X de 72.906”. Si se corta a la mitad, volvé a subir el
+> mismo archivo con **Agregar contactos**: no duplica a los que ya entraron.
 
 ---
 

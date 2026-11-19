@@ -16,6 +16,7 @@
 import { db } from "./db";
 import type { ConfigEmpresa } from "@prisma/client";
 import { enviarMensajeDatafy, enviarTemplateDatafy } from "./datafy";
+import { normalizarTelefonoPY } from "./telefono";
 
 const META_API_VERSION = "v21.0";
 const META_GRAPH_URL = `https://graph.facebook.com/${META_API_VERSION}`;
@@ -44,35 +45,7 @@ export interface MetaSendResult {
  * - "+595981123456" → "595981123456"
  * - "595981123456" → "595981123456"
  */
-export function normalizarTelefonoPY(phone: string): string | null {
-  if (!phone) return null;
-  let clean = phone.replace(/\D/g, "");
-  // Caso: 09XX XXX XXX → 595 9XX XXX XXX
-  if (clean.length === 10 && clean.startsWith("09")) {
-    return "595" + clean.slice(1);
-  }
-  // Caso: 9XX XXX XXX sin 0 (raro)
-  if (clean.length === 9 && clean.startsWith("9")) {
-    return "595" + clean;
-  }
-  // Ya está en formato internacional
-  if (clean.length === 12 && clean.startsWith("595")) {
-    return clean;
-  }
-  if (clean.length === 13 && clean.startsWith("595")) {
-    return clean;
-  }
-  // Caso: 595 + 9 dígitos (algunos números paraguayos)
-  if (clean.length === 11 && clean.startsWith("595")) {
-    return clean;
-  }
-  // Fallback: si no matchea ningún patrón pero tiene al menos 6 dígitos,
-  // devolver el número limpio (sin descartarlo)
-  if (clean.length >= 6) {
-    return clean;
-  }
-  return null;
-}
+export { normalizarTelefonoPY } from "./telefono";
 
 /**
  * Envía un mensaje de texto simple (sin template).
