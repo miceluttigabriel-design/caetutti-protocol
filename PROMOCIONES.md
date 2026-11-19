@@ -54,10 +54,18 @@ Cosas que el sistema hace solo:
 
 ## 3. Las tres formas de enviar
 
-### Manual (wa.me) — no gasta API
-El sistema te muestra la lista. Tocás **WhatsApp** en un contacto y se abre
-WhatsApp con el mensaje ya escrito y personalizado; vos apretás enviar.
-Al abrirlo, el contacto queda marcado como **Enviado**.
+### Manual (ZapFast / wa.me) — no gasta API
+El sistema te muestra la lista. Tocás **Abrir en ZapFast** y pasa esto:
+
+1. Copia el mensaje ya personalizado al portapapeles.
+2. Abre (o trae al frente) **ZapFast** en el chat de ese contacto.
+
+Allá apretás **Ctrl+V** y enviás. El contacto queda **Pendiente** hasta que lo
+marcás como **Enviado** con el ✓ de la fila (o **Deshacer** si te equivocaste).
+
+Si en esa PC no tenés ZapFast, al lado está el botón **wa.me**, que abre
+WhatsApp normal (Web, escritorio o celular) con el texto ya escrito y lo marca
+como enviado al abrirlo.
 
 Ideal para empezar o cuando son pocos.
 
@@ -85,22 +93,36 @@ Podés **Detener** cuando quieras y retomar después: los enviados no se repiten
 ### Nota sobre ZapFast (github.com/crmne/zapfast)
 
 ZapFast es una **app de escritorio** (Windows, macOS, Linux) para leer y
-responder WhatsApp con una cuenta propia, estilo WhatsApp Web nativo. No es un
-servidor ni tiene API.
+responder WhatsApp con una cuenta propia. No es un servidor ni manda mensajes
+en masa: no tiene API pública ni bots.
 
-Su propia documentación dice: *“No automation: no bots, MCP server, or
-interface for other programs to read or send messages, and no scheduled, bulk
-or automatic replies.”*
+Lo que **sí** hace, y ya está conectado en el sistema:
 
-O sea:
-- **No puede** leer el Excel ni mandar mensajes en masa desde este sistema.
-- **No se conecta** al panel de Promociones.
-- Es un cliente **no oficial**: WhatsApp puede sancionar la cuenta que lo usa.
+- Acepta que se le pase un número y **abre el chat de esa persona**, trayendo su
+  ventana al frente. No escribe el mensaje solo.
+- Por eso el botón **“Abrir en ZapFast”** hace dos cosas de una: **copia el
+  mensaje personalizado** y **abre el chat** en ZapFast. Allá apretás `Ctrl+V` y
+  enviás. Son dos teclas.
+- La **imagen** no viaja sola en este modo: en la ficha de la campaña tenés
+  **Descargar imagen** y la adjuntás en ZapFast (que sí permite pegar fotos).
 
-Lo que sí podés hacer: usarlo como tu WhatsApp de escritorio y pegar ahí los
-mensajes que copiás con el modo **Copiar y pegar**. Para envío masivo real,
-seguí usando el modo **Automático (API)** con el WhatsApp que ya está conectado
-a la cobranza.
+#### Instalarlo una sola vez en cada PC
+
+La primera vez, en cada computadora donde quieras usar ZapFast:
+
+1. En la campaña, modo **Manual**, tocá **“¿No abre? Ejecutá esto una sola vez”**.
+2. Se descarga `instalar-zapfast.cmd`. Abrilo (doble clic).
+3. Windows puede avisar que es un archivo descargado: **Más información →
+   Ejecutar de todas formas**.
+4. Listo. No pide administrador: todo queda en tu usuario.
+
+Ese archivo solo registra el enlace `zapfast://` para que el navegador pueda
+abrir ZapFast. La primera vez el navegador pregunta **“¿Abrir ZapFast?”**;
+marcá que sí y listo.
+
+> ZapFast es un cliente **no oficial**: WhatsApp puede sancionar la cuenta que lo
+> usa. Para envío masivo real y sin tocar teclas, seguí usando el modo
+> **Automático (API)** con el WhatsApp que ya está conectado a la cobranza.
 
 ---
 
@@ -185,6 +207,7 @@ src/app/api/promociones/[id]/enviar/route.ts      (envío por API)
 src/app/api/promociones/[id]/imagen/route.ts      (subir / quitar imagen)
 src/app/api/promociones/imagen/[token]/route.ts   (URL pública para WhatsApp)
 src/lib/promociones-imagen.ts                     (compresión en el navegador)
+public/zapfast/instalar-zapfast.cmd               (conecta ZapFast con el navegador)
 src/app/api/promociones/[id]/contactos/[contactoId]/route.ts (marcar manual)
 src/app/api/admin/setup-promociones/route.ts      (preparar/verificar tablas)
 ```

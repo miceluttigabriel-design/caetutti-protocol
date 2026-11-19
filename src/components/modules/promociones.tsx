@@ -890,6 +890,33 @@ function DetalleCampana({
     }
   };
 
+  /* -------------------- ZapFast (app de escritorio) -------------------- */
+
+  /**
+   * Abre el chat del contacto en ZapFast y deja el mensaje en el portapapeles.
+   * ZapFast acepta un número o un link wa.me como argumento y trae su ventana
+   * al frente, pero no permite escribir el texto solo: por eso lo copiamos y
+   * el usuario pega con Ctrl+V.
+   */
+  const abrirZapFast = async (contacto: any) => {
+    const mensaje = aplicarVariables(promocion.mensaje, contacto);
+    const copiado = await copiarAlPortapapeles(mensaje);
+
+    const tel = String(contacto.telefonoNormalizado || contacto.telefono || "").replace(/\D/g, "");
+    if (!tel) {
+      toast.error("Ese contacto no tiene un teléfono válido");
+      return;
+    }
+
+    window.location.href = `zapfast://${tel}`;
+
+    if (copiado) {
+      toast.success("Mensaje copiado. En ZapFast: Ctrl+V y Enter.");
+    } else {
+      toast.message("Se abrió ZapFast. Pegá el mensaje con Ctrl+V.");
+    }
+  };
+
   /* -------------------- Copiar y pegar (ZapFast / WhatsApp Web) -------------------- */
 
   const copiarMensaje = async (contacto: any, marcar = true) => {
@@ -1084,15 +1111,27 @@ function DetalleCampana({
               )
             ) : (
               pendientesCount > 0 && (
-                <Button
-                  size="sm" className="h-8 text-xs glow-primary"
-                  onClick={async () => {
-                    const c = await siguientePendiente();
-                    if (c) abrirWhatsapp(c);
-                  }}
-                >
-                  <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> Abrir el siguiente ({pendientesCount})
-                </Button>
+                <>
+                  <Button
+                    size="sm" className="h-8 text-xs glow-primary"
+                    onClick={async () => {
+                      const c = await siguientePendiente();
+                      if (c) abrirZapFast(c);
+                    }}
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1.5" /> Abrir en ZapFast ({pendientesCount})
+                  </Button>
+                  <Button
+                    size="sm" variant="outline" className="h-8 text-xs"
+                    onClick={async () => {
+                      const c = await siguientePendiente();
+                      if (c) abrirWhatsapp(c);
+                    }}
+                    title="Abrir en WhatsApp normal (wa.me)"
+                  >
+                    <MessageCircle className="w-3.5 h-3.5 mr-1.5" /> wa.me
+                  </Button>
+                </>
               )
             )}
 
@@ -1118,6 +1157,22 @@ function DetalleCampana({
               <RefreshCw className="w-3.5 h-3.5" />
             </Button>
           </div>
+
+          {promocion.modoEnvio === "manual" && pendientesCount > 0 && (
+            <p className="text-[10px] text-muted-foreground">
+              “Abrir en ZapFast” copia el mensaje y abre el chat. Allá pegás con{" "}
+              <span className="text-foreground">Ctrl+V</span> y enviás. La primera vez,
+              el navegador te pregunta si querés abrir ZapFast.{" "}
+              <a
+                href="/zapfast/instalar-zapfast.cmd"
+                download
+                className="text-primary hover:underline"
+              >
+                ¿No abre? Ejecutá esto una sola vez
+              </a>
+              .
+            </p>
+          )}
 
           {subiendo && cargandoAgregar && (
             <p className="text-[11px] text-sky-300">
@@ -1227,12 +1282,22 @@ function DetalleCampana({
                       <Copy className="w-3 h-3 mr-1" /> Copiar
                     </Button>
                   ) : (
-                    <Button
-                      size="sm" variant="outline" className="h-7 text-[10px] shrink-0"
-                      onClick={() => abrirWhatsapp(c)}
-                    >
-                      <MessageCircle className="w-3 h-3 mr-1" /> WhatsApp
-                    </Button>
+                    <>
+                      <Button
+                        size="sm" variant="outline" className="h-7 text-[10px] shrink-0"
+                        onClick={() => abrirZapFast(c)}
+                        title="Copiar el mensaje y abrir el chat en ZapFast"
+                      >
+                        <Send className="w-3 h-3 mr-1" /> ZapFast
+                      </Button>
+                      <Button
+                        size="sm" variant="ghost" className="h-7 px-2 text-[10px] shrink-0"
+                        onClick={() => abrirWhatsapp(c)}
+                        title="Abrir en WhatsApp normal (wa.me)"
+                      >
+                        <MessageCircle className="w-3 h-3" />
+                      </Button>
+                    </>
                   )}
                   <Button
                     size="sm" variant="ghost" className="h-7 px-2 text-[10px] shrink-0"

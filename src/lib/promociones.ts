@@ -7,7 +7,7 @@
  */
 
 export const MODOS_ENVIO = [
-  { key: "manual", label: "Manual (wa.me)", desc: "Abre WhatsApp con el mensaje listo; vos apretás enviar." },
+  { key: "manual", label: "Manual (ZapFast / wa.me)", desc: "Abre el chat en ZapFast o WhatsApp y copia el mensaje; pegás y enviás vos." },
   { key: "api", label: "Automático (API)", desc: "El sistema manda solo, con el WhatsApp conectado." },
   { key: "copiar", label: "Copiar y pegar", desc: "Copia el mensaje al portapapeles para pegarlo en WhatsApp o ZapFast." },
 ] as const;
