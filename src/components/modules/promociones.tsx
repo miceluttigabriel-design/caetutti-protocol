@@ -914,6 +914,7 @@ function DetalleCampana({
 
     const tel = String(contacto.telefonoNormalizado || contacto.telefono || "").replace(/\D/g, "");
     if (!tel) {
+      setZapfastEnviando(false);
       toast.error("Ese contacto no tiene un teléfono válido");
       return;
     }
