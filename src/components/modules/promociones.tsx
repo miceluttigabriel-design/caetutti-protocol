@@ -945,6 +945,8 @@ function DetalleCampana({
 
     // Igual que wa.me: si el envío salió, el contacto no tiene que volver a
     // aparecer como pendiente. Damos unos segundos a que ZapFast mande.
+    // Si la peticion se cuelga, el boton se libera igual y no queda cargando.
+    const desbloquear = setTimeout(() => setZapfastEnviando(false), 12000);
     setTimeout(async () => {
       try {
         await apiJson(`/api/promociones/${id}/contactos/${contacto.id}`, {
@@ -953,12 +955,13 @@ function DetalleCampana({
           body: JSON.stringify({ estado: "enviado" }),
         });
         await refrescarTodo();
-        toast.message("Marcado como enviado. Si no salió, usá Deshacer.", {
+        toast.message("Marcado como enviado. Si ZapFast sigue cargando, usá Deshacer.", {
           duration: 6000,
         });
       } catch {
         // Si falla, queda pendiente y se puede reintentar.
       } finally {
+        clearTimeout(desbloquear);
         setZapfastEnviando(false);
       }
     }, 10000);

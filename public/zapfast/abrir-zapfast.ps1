@@ -10,11 +10,11 @@ param([string]$Url)
 # A ZapFast se le pasa un link https://wa.me/<numero>: con el numero
 # pelado la app a veces no abre el chat cuando ya esta corriendo.
 #
-# Despues:
-#   1. pone la ventana de ZapFast al frente,
-#   2. hace clic en el cuadro de texto (para que tome el foco),
-#   3. pega el mensaje con Ctrl+V,
-#   4. manda con Enter.
+# ZapFast tarda en cargar ("Loading older messages from your phone").
+# Mientras carga tiene una ventana sin controles accesibles. Este
+# conector espera a que aparezca el cuadro de mensaje (control "Message")
+# y lo enfoca directamente por Accessibilidad, sin clickear: asi no
+# importa el DPI ni la barra de tareas.
 #
 # Si algo falla, deja el chat abierto y el mensaje copiado, y NO envia
 # nada. Deja un registro en ultimo-intento.txt.
@@ -23,7 +23,7 @@ param([string]$Url)
 $ErrorActionPreference = "SilentlyContinue"
 
 # La pantalla de esta PC esta al 125%. Sin esto, Windows escala las
-# coordenadas y los clics caen en otro lado.
+# coordenadas del plan de respaldo.
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -43,7 +43,7 @@ function Log([string]$msg) {
   } catch {}
 }
 
-Log "inicio | conector v5.1"
+Log "inicio | conector v6"
 
 if (-not $Url) { Log "sin URL"; exit 0 }
 
@@ -125,10 +125,13 @@ public class VentanaZap {
   [DllImport("user32.dll")] public static extern void SwitchToThisWindow(IntPtr h, bool altTab);
   [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
   [DllImport("user32.dll")] public static extern void mouse_event(uint f, uint dx, uint dy, uint d, UIntPtr e);
+  [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
   [DllImport("kernel32.dll")] public static extern uint GetCurrentThreadId();
 
   [StructLayout(LayoutKind.Sequential)]
   public struct RECT { public int Left; public int Top; public int Right; public int Bottom; }
+  [StructLayout(LayoutKind.Sequential)]
+  public struct POINT { public int X; public int Y; }
 
   public static IntPtr Buscar(uint pid) {
     IntPtr mejor = IntPtr.Zero;
@@ -147,8 +150,7 @@ public class VentanaZap {
     return mejor;
   }
 
-  public static IntPtr Activar(uint pid) {
-    IntPtr h = Buscar(pid);
+  public static IntPtr Activar(IntPtr h) {
     if (h == IntPtr.Zero) return IntPtr.Zero;
 
     ShowWindow(h, 3);   // SW_MAXIMIZE: siempre entra en la pantalla
@@ -183,6 +185,14 @@ public class VentanaZap {
     return GetForegroundWindow() == h;
   }
 
+  public static bool PuntoEsDe(int x, int y, uint pid) {
+    POINT p = new POINT();
+    p.X = x; p.Y = y;
+    uint dueno;
+    GetWindowThreadProcessId(WindowFromPoint(p), out dueno);
+    return dueno == pid;
+  }
+
   public static void Click(int x, int y) {
     SetCursorPos(x, y);
     System.Threading.Thread.Sleep(120);
@@ -193,95 +203,185 @@ public class VentanaZap {
 }
 "@
 
+# --- Accessibilidad: esperar a que ZapFast cargue de verdad ---------
+$uiA = $true
+try {
+  Add-Type -AssemblyName UIAutomationClient
+  Add-Type -AssemblyName UIAutomationTypes
+} catch {
+  $uiA = $false
+  Log "sin UIAutomation: uso el plan de respaldo"
+}
+
+function Obtener-VentanaCargada([uint32]$pidz) {
+  try {
+    $condPid = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ProcessIdProperty, [int]$pidz)
+    $condEdit = New-Object System.Windows.Automation.PropertyCondition(
+      [System.Windows.Automation.AutomationElement]::ControlTypeProperty,
+      [System.Windows.Automation.ControlType]::Edit)
+    $tops = [System.Windows.Automation.AutomationElement]::RootElement.FindAll(
+      [System.Windows.Automation.TreeScope]::Children, $condPid)
+
+    $mejor = $null
+    $mejorAncho = 0
+    foreach ($top in $tops) {
+      try {
+        $h = [IntPtr][int]$top.Current.NativeWindowHandle
+        if ($h -eq [IntPtr]::Zero) { continue }
+        $edits = $top.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condEdit)
+        foreach ($e in $edits) {
+          # El buscador mide ~260 px; el cuadro de mensaje, >1000 px.
+          $ancho = $e.Current.BoundingRectangle.Width
+          if ($ancho -gt 400 -and $ancho -gt $mejorAncho) {
+            $mejorAncho = $ancho
+            $mejor = [pscustomobject]@{
+              Handle = $h
+              Composer = $e
+              Nombre = $e.Current.Name
+            }
+          }
+        }
+      } catch {}
+    }
+    return $mejor
+  } catch {
+    return $null
+  }
+}
+
+function FocoEstaEnMensaje($ventana) {
+  try {
+    $f = [System.Windows.Automation.AutomationElement]::FocusedElement
+    if (-not $f) { return $false }
+    if ($f.Current.ControlType -ne [System.Windows.Automation.ControlType]::Edit) { return $false }
+    if ($f.Current.Name -ne $ventana.Nombre) { return $false }
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+function Enfocar-Mensaje($ventana) {
+  try {
+    $ventana.Composer.SetFocus()
+    Start-Sleep -Milliseconds 350
+    return (FocoEstaEnMensaje $ventana)
+  } catch {
+    return $false
+  }
+}
+
 # --- Abrir el chat ---------------------------------------------------
-$antes = @(Get-Process zapfast -ErrorAction SilentlyContinue).Count
 Start-Process -FilePath $exe -ArgumentList "https://wa.me/$tel"
-$arranqueFrio = ($antes -eq 0)
 
 # Sin texto (mensaje muy largo) solo abrimos el chat y no mandamos nada.
 if (-not $texto) { Log "solo abri el chat"; exit 0 }
 
 $ws = New-Object -ComObject WScript.Shell
 $zproc = $null
+$zpid = 0
 $h = [IntPtr]::Zero
+$ventana = $null
 
-for ($n = 0; $n -lt 60; $n++) {
-  $zproc = Get-Process zapfast -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($zproc) {
-    $h = [VentanaZap]::Activar([uint32]$zproc.Id)
-    if ($h -ne [IntPtr]::Zero -and [VentanaZap]::AlFrente($h)) { break }
+if ($uiA) {
+  # ZapFast muestra "Loading older messages from your phone" al arrancar.
+  # Esperamos hasta 90 s a que aparezca el cuadro de mensaje.
+  for ($n = 0; $n -lt 180; $n++) {
+    $zproc = Get-Process zapfast -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($zproc) {
+      $zpid = [uint32]$zproc.Id
+      $ventana = Obtener-VentanaCargada $zpid
+      if ($ventana) {
+        $h = [VentanaZap]::Activar($ventana.Handle)
+        if ($h -ne [IntPtr]::Zero -and [VentanaZap]::AlFrente($h)) { break }
+      }
+    }
+    if ($n % 10 -eq 0) { Log "esperando a que ZapFast cargue ($([int]($n / 2))s)" }
+    Start-Sleep -Milliseconds 500
   }
-  Start-Sleep -Milliseconds 500
-}
 
-if (-not $zproc -or $h -eq [IntPtr]::Zero) { Log "no encontre la ventana de ZapFast"; exit 0 }
-if (-not [VentanaZap]::AlFrente($h)) { Log "no pude poner la ventana al frente"; exit 0 }
-
-Log "ventana al frente (handle $h)"
-
-if ($arranqueFrio) {
-  Log "arranque en frio: espero a que cargue"
-  Start-Sleep -Seconds 7
-} else {
-  Start-Sleep -Milliseconds 2200
-}
-
-# Al arrancar, ZapFast puede cambiar de ventana (carga -> principal).
-# La volvemos a buscar y la maximizamos para que el cuadro de texto quede
-# dentro de la pantalla.
-$h = [IntPtr]::Zero
-for ($i = 0; $i -lt 24; $i++) {
-  $zproc = Get-Process zapfast -ErrorAction SilentlyContinue | Select-Object -First 1
-  if ($zproc) {
-    $h = [VentanaZap]::Activar([uint32]$zproc.Id)
-    if ($h -ne [IntPtr]::Zero -and [VentanaZap]::AlFrente($h)) { break }
-  }
-  Start-Sleep -Milliseconds 500
-}
-
-if ($h -eq [IntPtr]::Zero -or -not [VentanaZap]::AlFrente($h)) {
-  Log "perdi el foco antes de escribir"
-  exit 0
-}
-
-Start-Sleep -Milliseconds 700
-
-# --- Un clic en el cuadro de texto para que tome el foco ------------
-$r = New-Object 'VentanaZap+RECT'
-[void][VentanaZap]::GetWindowRect($h, [ref]$r)
-$w = $r.Right - $r.Left
-$hh = $r.Bottom - $r.Top
-if ($w -gt 200 -and $hh -gt 200) {
-  $cx = $r.Left + [int]($w * 0.65)
-  $cy = $r.Bottom - 31
-  [VentanaZap]::Click($cx, $cy)
-  Log "clique en el cuadro de texto ($cx,$cy)"
-  Start-Sleep -Milliseconds 400
-} else {
-  Log "ventana muy chica ($w x $hh): no hago clic"
-}
-
-if (-not [VentanaZap]::AlFrente($h)) {
-  Log "perdi el foco despues del clic"
-  exit 0
-}
-
-if ($clipOk) {
-  $ws.SendKeys("^v")
-  Start-Sleep -Milliseconds 1300
-  if (-not [VentanaZap]::AlFrente($h)) {
-    Log "perdi el foco despues de pegar: no envio"
+  if (-not $ventana) {
+    Log "ZapFast sigue cargando: el mensaje queda en el portapapeles"
     exit 0
   }
-  $ws.SendKeys("{ENTER}")
-  Log "pegado y Enter enviados"
-  exit 0
+  if (-not [VentanaZap]::AlFrente($h)) {
+    Log "no pude poner al frente la ventana cargada"
+    exit 0
+  }
+  Log "ZapFast listo: cuadro '$($ventana.Nombre)' encontrado (handle $h)"
+
+  $focoOk = $false
+  for ($i = 0; $i -lt 6; $i++) {
+    $focoOk = Enfocar-Mensaje $ventana
+    if ($focoOk) { break }
+    [void][VentanaZap]::Activar($ventana.Handle)
+    Start-Sleep -Milliseconds 400
+  }
+  if (-not $focoOk) {
+    Log "no pude enfocar el cuadro: no envio, mensaje queda copiado"
+    exit 0
+  }
+  Log "cuadro de mensaje enfocado (sin clic)"
+
+  if ($clipOk) {
+    $ws.SendKeys("^v")
+    Start-Sleep -Milliseconds 1300
+    if (-not [VentanaZap]::AlFrente($h) -or -not (FocoEstaEnMensaje $ventana)) {
+      Log "perdi el foco despues de pegar: no envio, revisa el chat"
+      exit 0
+    }
+    $ws.SendKeys("{ENTER}")
+    Log "pegado y Enter enviados"
+    exit 0
+  }
+
+  # Sin portapapeles: escribimos tecla por tecla sobre el cuadro enfocado.
+  Log "respaldo: escribiendo el texto"
+} else {
+  # --- Plan de respaldo sin Accessibilidad: clic verificado ----------
+  for ($n = 0; $n -lt 60; $n++) {
+    $zproc = Get-Process zapfast -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($zproc) {
+      $zpid = [uint32]$zproc.Id
+      $h = [VentanaZap]::Activar([VentanaZap]::Buscar($zpid))
+      if ($h -ne [IntPtr]::Zero -and [VentanaZap]::AlFrente($h)) { break }
+    }
+    Start-Sleep -Milliseconds 500
+  }
+  if (-not $zproc -or $h -eq [IntPtr]::Zero -or -not [VentanaZap]::AlFrente($h)) {
+    Log "no pude poner ZapFast al frente"
+    exit 0
+  }
+  Start-Sleep -Seconds 8
+  [void][VentanaZap]::Activar($h)
+
+  $r = New-Object 'VentanaZap+RECT'
+  [void][VentanaZap]::GetWindowRect($h, [ref]$r)
+  $w = $r.Right - $r.Left
+  $area = [System.Windows.Forms.Screen]::FromHandle($h).WorkingArea
+  $cy = [Math]::Min($r.Bottom - 31, $area.Bottom - 60)
+  $cx = $r.Left + [int]($w * 0.65)
+  if (-not [VentanaZap]::PuntoEsDe($cx, $cy, $zpid)) {
+    Log "el punto ($cx,$cy) no es de ZapFast: no hago clic"
+    exit 0
+  }
+  [VentanaZap]::Click($cx, $cy)
+  Log "clique verificado en el cuadro ($cx,$cy)"
+  Start-Sleep -Milliseconds 400
+
+  if (-not [VentanaZap]::AlFrente($h)) { Log "perdi el foco despues del clic"; exit 0 }
+  if ($clipOk) {
+    $ws.SendKeys("^v")
+    Start-Sleep -Milliseconds 1300
+    if (-not [VentanaZap]::AlFrente($h)) { Log "perdi el foco despues de pegar: no envio"; exit 0 }
+    $ws.SendKeys("{ENTER}")
+    Log "pegado y Enter enviados"
+    exit 0
+  }
 }
 
 # --- Respaldo: escribir el texto directo ----------------------------
-# Se usa cuando Windows no deja tocar el portapapeles. Va tecla por tecla.
-Log "respaldo: escribiendo el texto"
-
 Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
@@ -370,7 +470,8 @@ foreach ($ch in $texto.ToCharArray()) {
 }
 
 Start-Sleep -Milliseconds 1000
-if ([VentanaZap]::AlFrente($h)) {
+$focoFinal = if ($uiA -and $ventana) { FocoEstaEnMensaje $ventana } else { [VentanaZap]::AlFrente($h) }
+if ($focoFinal) {
   [void][TecladoUnicode]::Key(0x0D, $false)
   [void][TecladoUnicode]::Key(0x0D, $true)
   Log "respaldo: $escritos caracteres escritos y Enter enviado"
