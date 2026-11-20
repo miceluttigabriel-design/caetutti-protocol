@@ -946,7 +946,7 @@ function DetalleCampana({
     // Igual que wa.me: si el envío salió, el contacto no tiene que volver a
     // aparecer como pendiente. Damos unos segundos a que ZapFast mande.
     // Si la peticion se cuelga, el boton se libera igual y no queda cargando.
-    const desbloquear = setTimeout(() => setZapfastEnviando(false), 12000);
+    const desbloquear = setTimeout(() => setZapfastEnviando(false), 7000);
     setTimeout(async () => {
       try {
         await apiJson(`/api/promociones/${id}/contactos/${contacto.id}`, {
@@ -964,7 +964,7 @@ function DetalleCampana({
         clearTimeout(desbloquear);
         setZapfastEnviando(false);
       }
-    }, 10000);
+    }, 5000);
   };
 
   /* -------------------- Copiar y pegar (ZapFast / WhatsApp Web) -------------------- */
@@ -1213,7 +1213,7 @@ function DetalleCampana({
           {promocion.modoEnvio === "manual" && pendientesCount > 0 && (
             <p className="text-[10px] text-muted-foreground">
               “Abrir en ZapFast” abre el chat, pega el mensaje y lo envía solo
-              (tarda unos segundos). A los 10 segundos queda marcado como enviado:
+              (tarda ~3 segundos). A los 5 segundos queda marcado como enviado:
               si no salió, usá <span className="text-foreground">Deshacer</span> en la lista.
               Si todavía no instalaste el conector,{" "}
               <a

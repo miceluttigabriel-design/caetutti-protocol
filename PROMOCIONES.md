@@ -103,8 +103,8 @@ Lo que **sí** hace, y ya está conectado en el sistema:
   ventana al frente.
 - El botón **“Abrir en ZapFast”** le pasa también el mensaje. Un conector chico
   instalado en la PC abre el chat, **espera a que ZapFast termine de cargar**,
-  enfoca el cuadro de mensaje directamente (sin clics), pega (`Ctrl+V`) y envía
-  (`Enter`) solo. Vos tocás una vez y el mensaje sale.
+  clickea el cuadro de mensaje usando su posición real, pega (`Ctrl+V`) y envía
+  (`Enter`) solo. Vos tocás una vez y el mensaje sale en ~3 segundos.
 - La **imagen** no viaja sola en este modo: en la ficha de la campaña tenés
   **Descargar imagen** y la adjuntás en ZapFast (que sí permite pegar fotos).
 
@@ -232,15 +232,14 @@ y `topbar.tsx` para que **Promociones** aparezca en el menú.
 
 ### Si ZapFast abre pero no manda el mensaje
 
-1. Si ZapFast muestra **“Loading older messages from your phone”**, esperá: el
-   conector espera hasta 90 segundos a que cargue y recién entonces escribe.
+1. Si ZapFast muestra **“Loading older messages from your phone”**, esperá
+   poquito: el conector espera 4 segundos y, si sigue cargando, reinicia ZapFast
+   (vuelve a quedar listo en ~1 segundo) y recién entonces escribe.
 2. Mirá el registro que deja el conector en esta PC:
    `C:\Users\usuario\AppData\Local\ZapFastAbrir\ultimo-intento.txt`
-   - `ZapFast listo: cuadro 'Message' encontrado` y `pegado y Enter enviados`
-     → salió.
-   - `esperando a que ZapFast cargue` → está sincronizando; es normal.
-   - `ZapFast sigue cargando: el mensaje queda en el portapapeles` → no se
-     mandó nada; esperá a que cargue y pegá con Ctrl+V + Enter.
+   - `ZapFast listo en Xs: cuadro 'Message'` y
+     `pegado y Enter enviados` → salió.
+   - `ZapFast estaba cargando: lo reinicio` → estaba colgado; ya lo reinició.
    - `portapapeles=False` → Windows no dejó usar el portapapeles; el conector
      escribe el texto tecla por tecla como respaldo.
    - `no pude enfocar el cuadro` o `perdi el foco despues de pegar` → no se
